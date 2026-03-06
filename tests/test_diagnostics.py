@@ -147,7 +147,9 @@ def test_format_diagnostic_includes_multiline_snippet_and_streams() -> None:
     expected_snippet = "  snippet:\n    x = 1\n    y = 2"
     assert expected_snippet in output
 
-    expected_stderr = "  stderr:\n    Traceback:\n      File <string>\n    ZeroDivisionError"
+    expected_stderr = (
+        "  stderr:\n    Traceback:\n      File <string>\n    ZeroDivisionError"
+    )
     assert expected_stderr in output
 
     assert "  stdout: Debug output" in output
