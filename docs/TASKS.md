@@ -576,7 +576,7 @@ Can proceed in parallel with renderer tests.
 
 ---
 
-## T25 — Artifact Rendering Tests
+## T25 — Artifact Rendering Tests (DONE)
 Create tests for chart and table artifact rendering.
 
 ### Scope
