@@ -34,12 +34,17 @@ _DOCUMENT_TEMPLATE = Environment(
     {% if author %}<meta name="author" content="{{ author }}">{% endif %}
     {% if date %}<meta name="date" content="{{ date }}">{% endif %}
     <style>
+      /* TODO: Revisit this as a minimal theming system so page margins and
+         related layout spacing can be configured intentionally instead of
+         living as hard-coded CSS defaults. */
+      @page {
+        margin: 8mm;
+      }
       body {
         color: #111827;
         font-family: Georgia, "Times New Roman", serif;
         font-size: 12pt;
         line-height: 1.6;
-        margin: 36px;
       }
       .mdcc-frontmatter {
         border-bottom: 1px solid #d1d5db;

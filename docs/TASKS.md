@@ -832,9 +832,6 @@ A task should be considered complete when:
 
 ---
 
-# 7. Final Note
-
-This task breakdown is intentionally product-neutral beyond the given specification.
-It is designed to help coding agents work in parallel without redefining the compiler.
-
-Where the specification defers a decision, the corresponding task should preserve that deferral rather than silently resolving it.
+# 8. Future Considerations
+- **Configurable Themes**: Support for user-defined CSS or theme presets in frontmatter.
+- **Layout Overrides**: Control over margins, padding, and font sizes via document metadata.
