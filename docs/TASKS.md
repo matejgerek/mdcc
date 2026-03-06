@@ -485,7 +485,7 @@ Integration task. Must be done after enough core components exist.
 
 ---
 
-## T21 — Frontmatter and Metadata Behavior Tests
+## T21 — Frontmatter and Metadata Behavior Tests (DONE)
 Create tests that cover supported frontmatter behavior and document-level metadata handling.
 
 ### Scope
@@ -507,7 +507,7 @@ Can be done alongside other testing tasks.
 
 ---
 
-## T22 — Parsing and Structural Validation Tests
+## T22 — Parsing and Structural Validation Tests (DONE)
 Create tests for markdown parsing, executable block parsing, and structural validation.
 
 ### Scope
@@ -530,7 +530,7 @@ Can proceed in parallel with other test tracks.
 
 ---
 
-## T23 — Execution and Runtime Policy Tests
+## T23 — Execution and Runtime Policy Tests (DONE)
 Create tests for isolated execution behavior and runtime-rule enforcement.
 
 ### Scope
