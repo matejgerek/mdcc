@@ -421,7 +421,7 @@ Mostly downstream; limited independent work before integration.
 
 ---
 
-## T18 — Diagnostics Model and Error Classification
+## T18 — Diagnostics Model and Error Classification (DONE)
 Implement the diagnostics layer used across parse, validation, execution, rendering, timeout, and PDF-generation failures.
 
 ### Scope

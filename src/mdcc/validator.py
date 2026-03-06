@@ -2,12 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from mdcc.errors import ValidationError
+from mdcc.errors import ErrorContext, ValidationError
 from mdcc.models import (
     BlockType,
-    Diagnostic,
-    DiagnosticCategory,
-    DiagnosticStage,
     DocumentModel,
     ExecutableBlockNode,
     Frontmatter,
@@ -35,7 +32,7 @@ def assert_valid_document_structure(document: DocumentModel) -> DocumentModel:
     if result.ok:
         return document
 
-    raise ValidationError(_build_validation_diagnostic(document, result.issues))
+    raise _build_validation_error(document, result.issues)
 
 
 def _validate_frontmatter(
@@ -184,18 +181,18 @@ def _validate_executable_indices(
     return issues
 
 
-def _build_validation_diagnostic(
+def _build_validation_error(
     document: DocumentModel,
     issues: list[ValidationIssue],
-) -> Diagnostic:
+) -> ValidationError:
     error_issues = [issue for issue in issues if issue.severity is ValidationSeverity.ERROR]
     primary_issue = error_issues[0] if error_issues else issues[0]
-    return Diagnostic(
-        stage=DiagnosticStage.VALIDATION,
-        category=DiagnosticCategory.VALIDATION_ERROR,
-        message=primary_issue.message,
-        source_path=document.source_path,
-        location=primary_issue.location,
+    return ValidationError.from_message(
+        primary_issue.message,
+        context=ErrorContext(
+            source_path=document.source_path,
+            location=primary_issue.location,
+        ),
         exception_message=_format_issue_summary(issues),
     )
 

@@ -5,11 +5,8 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError as PydanticValidationError
 
-from mdcc.errors import ParseError, ReadError, ValidationError
+from mdcc.errors import ErrorContext, ParseError, ReadError, ValidationError
 from mdcc.models import (
-    Diagnostic,
-    DiagnosticCategory,
-    DiagnosticStage,
     Frontmatter,
     SourceDocumentInput,
     SourceLocation,
@@ -26,15 +23,10 @@ def read_source_document(source_path: str | Path) -> SourceDocumentInput:
     try:
         raw_text = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError) as exc:
-        raise ReadError(
-            Diagnostic(
-                stage=DiagnosticStage.READ,
-                category=DiagnosticCategory.READ_ERROR,
-                message=f"failed to read source file: {path}",
-                source_path=path,
-                exception_type=type(exc).__name__,
-                exception_message=str(exc),
-            )
+        raise ReadError.from_exception(
+            f"failed to read source file: {path}",
+            exc,
+            context=ErrorContext(source_path=path),
         ) from exc
 
     frontmatter_text, body_text = extract_frontmatter(raw_text, path)
@@ -62,11 +54,9 @@ def extract_frontmatter(raw_text: str, source_path: str | Path) -> tuple[str | N
             body_text = "".join(lines[index + 1 :])
             return frontmatter_text, body_text
 
-    raise ParseError(
-        Diagnostic(
-            stage=DiagnosticStage.PARSE,
-            category=DiagnosticCategory.PARSE_ERROR,
-            message="frontmatter opening delimiter is not closed",
+    raise ParseError.from_message(
+        "frontmatter opening delimiter is not closed",
+        context=ErrorContext(
             source_path=path,
             location=SourceLocation(
                 source_path=path,
@@ -76,7 +66,7 @@ def extract_frontmatter(raw_text: str, source_path: str | Path) -> tuple[str | N
                 ),
                 snippet=FRONTMATTER_DELIMITER,
             ),
-        )
+        ),
     )
 
 
@@ -93,31 +83,22 @@ def parse_frontmatter(
         payload = {}
 
     if not isinstance(payload, dict):
-        raise ValidationError(
-            Diagnostic(
-                stage=DiagnosticStage.VALIDATION,
-                category=DiagnosticCategory.VALIDATION_ERROR,
-                message="frontmatter must be a YAML mapping",
-                source_path=path,
-                source_snippet=frontmatter_text.strip() or None,
-                actual_output_type=type(payload).__name__,
-                expected_output_type="dict",
-            )
+        raise ValidationError.from_message(
+            "frontmatter must be a YAML mapping",
+            context=ErrorContext(source_path=path),
+            source_snippet=frontmatter_text.strip() or None,
+            actual_output_type=type(payload).__name__,
+            expected_output_type="dict",
         )
 
     try:
         return Frontmatter.model_validate(payload)
     except PydanticValidationError as exc:
-        raise ValidationError(
-            Diagnostic(
-                stage=DiagnosticStage.VALIDATION,
-                category=DiagnosticCategory.VALIDATION_ERROR,
-                message="frontmatter failed validation",
-                source_path=path,
-                source_snippet=frontmatter_text.strip() or None,
-                exception_type=type(exc).__name__,
-                exception_message=str(exc),
-            )
+        raise ValidationError.from_exception(
+            "frontmatter failed validation",
+            exc,
+            context=ErrorContext(source_path=path),
+            source_snippet=frontmatter_text.strip() or None,
         ) from exc
 
 
@@ -138,17 +119,11 @@ def _load_frontmatter_payload(frontmatter_text: str, source_path: Path) -> objec
                 ),
             )
 
-        raise ParseError(
-            Diagnostic(
-                stage=DiagnosticStage.PARSE,
-                category=DiagnosticCategory.PARSE_ERROR,
-                message="frontmatter contains invalid YAML",
-                source_path=source_path,
-                location=location,
-                source_snippet=frontmatter_text.strip() or None,
-                exception_type=type(exc).__name__,
-                exception_message=str(exc),
-            )
+        raise ParseError.from_exception(
+            "frontmatter contains invalid YAML",
+            exc,
+            context=ErrorContext(source_path=source_path, location=location),
+            source_snippet=frontmatter_text.strip() or None,
         ) from exc
 
 

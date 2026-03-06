@@ -3,12 +3,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from mdcc.errors import ParseError
+from mdcc.errors import ErrorContext, ParseError
 from mdcc.models import (
     BlockType,
-    Diagnostic,
-    DiagnosticCategory,
-    DiagnosticStage,
     DocumentModel,
     ExecutableBlockNode,
     MarkdownNode,
@@ -194,11 +191,9 @@ def _build_parse_error(
     line_number: int,
     line_text: str,
 ) -> ParseError:
-    return ParseError(
-        Diagnostic(
-            stage=DiagnosticStage.PARSE,
-            category=DiagnosticCategory.PARSE_ERROR,
-            message=message,
+    return ParseError.from_message(
+        message,
+        context=ErrorContext(
             source_path=source.source_path,
             location=_build_location(
                 source_path=source.source_path,
@@ -207,8 +202,8 @@ def _build_parse_error(
                 end_line_text=line_text,
                 snippet=line_text,
             ),
-            source_snippet=_snippet(line_text),
-        )
+        ),
+        source_snippet=_snippet(line_text),
     )
 
 
