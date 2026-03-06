@@ -16,6 +16,7 @@ from mdcc.models import (
     DocumentModel,
     ExecutableBlockNode,
     Frontmatter,
+    IntermediateDocument,
     MarkdownNode,
     NodeKind,
     RenderedArtifact,
@@ -27,6 +28,7 @@ from mdcc.models import (
 from mdcc.renderers import (
     assemble_document,
     render_chart_artifact,
+    render_intermediate_document,
     render_table_artifact,
     render_typed_result,
 )
@@ -428,3 +430,142 @@ def test_assemble_document_raises_for_mismatched_artifact_block_metadata(
         == "rendered artifact block metadata does not match parsed document block"
     )
     assert diagnostic.block_id == chart_result.block.node_id
+
+
+def test_render_intermediate_document_renders_html_in_document_order(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert isinstance(intermediate, IntermediateDocument)
+    assert intermediate.source_path == document.source_path
+    assert intermediate.base_path == document.source_path.parent
+    html = intermediate.html
+    assert "<title>Report</title>" in html
+    intro_index = html.index('data-node-id="node-0001"')
+    chart_index = html.index('data-block-id="block-0001"')
+    bridge_index = html.index('data-node-id="node-0002"')
+    table_index = html.index('data-block-id="block-0002"')
+    assert intro_index < chart_index < bridge_index < table_index
+    assert "<h1>Report</h1>" in html
+    assert "<h1>Intro</h1>" in html
+    assert "<svg" in html
+    assert "<table" in html
+    assert "Bridge paragraph" in html
+
+
+def test_render_intermediate_document_inserts_frontmatter_metadata(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    document.frontmatter = Frontmatter(
+        title="Quarterly Review",
+        author="Analyst",
+        date="2026-03-06",
+    )
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert "<title>Quarterly Review</title>" in intermediate.html
+    assert '<meta name="author" content="Analyst">' in intermediate.html
+    assert '<meta name="date" content="2026-03-06">' in intermediate.html
+    assert "<h1>Quarterly Review</h1>" in intermediate.html
+    assert "<p>Analyst</p>" in intermediate.html
+    assert "<p>2026-03-06</p>" in intermediate.html
+
+
+def test_render_intermediate_document_raises_when_chart_svg_is_missing(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    chart_artifact = render_chart_artifact(chart_result, build_context)
+    assert chart_artifact.path is not None
+    chart_artifact.path.unlink()
+    assembled = assemble_document(
+        document,
+        [chart_artifact, render_table_artifact(table_result, build_context)],
+    )
+
+    with pytest.raises(RenderingError) as exc_info:
+        render_intermediate_document(assembled)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.message == "failed to read rendered chart artifact"
+    assert diagnostic.block_id == chart_result.block.node_id
+    assert diagnostic.block_type is BlockType.CHART
+
+
+def test_render_intermediate_document_raises_when_table_html_is_missing(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    chart_artifact = render_chart_artifact(chart_result, build_context)
+    table_artifact = render_table_artifact(table_result, build_context).model_copy(
+        update={"html": None}
+    )
+    assembled = assemble_document(
+        document,
+        [chart_artifact, table_artifact],
+    )
+
+    with pytest.raises(RenderingError) as exc_info:
+        render_intermediate_document(assembled)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.message == "table artifact is missing its rendered HTML fragment"
+    assert diagnostic.block_id == table_result.block.node_id
+    assert diagnostic.block_type is BlockType.TABLE
+
+
+def test_render_intermediate_document_raises_for_template_render_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    def _boom(frontmatter: Frontmatter | None, body_fragments: list[str]) -> str:
+        raise RuntimeError("template failed")
+
+    monkeypatch.setattr("mdcc.renderers.document._render_template", _boom)
+
+    with pytest.raises(RenderingError) as exc_info:
+        render_intermediate_document(assembled)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.message == "failed to render intermediate document template"
+    assert diagnostic.source_path == document.source_path
+    assert diagnostic.exception_type == "RuntimeError"
+    assert diagnostic.exception_message == "template failed"

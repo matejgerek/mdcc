@@ -230,6 +230,13 @@ class AssembledDocument(BaseModel):
     nodes: list[AssembledDocumentNode] = Field(default_factory=list)
 
 
+class IntermediateDocument(BaseModel):
+    source_path: Path
+    frontmatter: Frontmatter | None = None
+    html: str
+    base_path: Path
+
+
 class ValidationIssue(BaseModel):
     severity: ValidationSeverity
     code: str
@@ -285,6 +292,7 @@ __all__ = [
     "ExecutionStreams",
     "ExecutionTiming",
     "Frontmatter",
+    "IntermediateDocument",
     "MarkdownNode",
     "NodeKind",
     "RenderedArtifact",

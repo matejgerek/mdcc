@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from mdcc.models import ChartResult, RenderedArtifact, TableResult, TypedBlockResult
 from mdcc.renderers.chart import render_chart_artifact
-from mdcc.renderers.document import assemble_document
+from mdcc.renderers.document import assemble_document, render_intermediate_document
 from mdcc.renderers.table import render_table_artifact
 from mdcc.utils.workspace import BuildContext
 
@@ -24,6 +24,7 @@ def render_typed_result(
 __all__ = [
     "assemble_document",
     "render_chart_artifact",
+    "render_intermediate_document",
     "render_table_artifact",
     "render_typed_result",
 ]
