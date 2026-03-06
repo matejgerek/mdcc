@@ -76,7 +76,7 @@ Must start first.
 
 ---
 
-## T02 — Core Domain Models and Shared Types
+## T02 — Core Domain Models and Shared (DONE) Types
 Define the shared internal models used across parsing, execution, rendering, diagnostics, and document assembly.
 
 ### Scope
