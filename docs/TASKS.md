@@ -299,7 +299,7 @@ Can proceed in parallel with artifact renderers.
 
 ---
 
-## T12 — Chart Artifact Renderer
+## T12 — Chart Artifact Renderer (DONE)
 Implement rendering of validated chart results into document-ready artifacts.
 
 ### Scope
@@ -319,7 +319,7 @@ Can proceed in parallel with T13 once typed result contracts are stable.
 
 ---
 
-## T13 — Table Artifact Renderer
+## T13 — Table Artifact Renderer (DONE)
 Implement rendering of validated table results into document-ready artifacts.
 
 ### Scope
