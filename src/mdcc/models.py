@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date as date_type
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -86,7 +86,7 @@ class SourceLocation(BaseModel):
 class Frontmatter(BaseModel):
     title: str | None = None
     author: str | None = None
-    date: date | str | None = None
+    date: date_type | str | None = None
     extra: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="before")
@@ -127,6 +127,14 @@ class DocumentModel(BaseModel):
     source_path: Path
     frontmatter: Frontmatter | None = None
     nodes: list[DocumentNode] = Field(default_factory=list)
+
+
+class SourceDocumentInput(BaseModel):
+    source_path: Path
+    raw_text: str
+    body_text: str
+    frontmatter_text: str | None = None
+    frontmatter: Frontmatter | None = None
 
 
 class ExecutionTiming(BaseModel):
@@ -265,6 +273,7 @@ __all__ = [
     "NodeKind",
     "RenderedArtifact",
     "SourceLocation",
+    "SourceDocumentInput",
     "SourcePosition",
     "SourceSpan",
     "TableResult",

@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "mdcc"
 version = "0.1.0"
@@ -11,6 +15,7 @@ dependencies = [
     "numpy>=2.4.2",
     "pandas>=3.0.1",
     "pydantic>=2.12.5",
+    "pyyaml>=6.0.3",
     "typer>=0.24.1",
     "vl-convert-python>=1.9.0.post1",
     "weasyprint>=68.1",
@@ -25,3 +30,9 @@ dev = [
     "pytest>=9.0.2",
     "ruff>=0.15.5",
 ]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.packages.find]
+where = ["src"]
