@@ -1,0 +1,5 @@
+region,revenue_target,customer_target,strategy_band,priority
+NA,150,480,Defend,1
+EU,120,365,Expand,2
+APAC,110,340,Accelerate,1
+LATAM,60,220,Incubate,3
