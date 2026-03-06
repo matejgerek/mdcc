@@ -67,6 +67,7 @@ def _execution_result(
 
 # --- Chart Tests ---
 
+
 def test_validate_typed_result_accepts_valid_chart_result() -> None:
     chart = (
         alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
@@ -103,9 +104,15 @@ def test_validate_typed_result_accepts_concat_charts() -> None:
     chart1 = alt.Chart(pd.DataFrame({"x": [1]})).mark_line()
     chart2 = alt.Chart(pd.DataFrame({"x": [1]})).mark_point()
 
-    for concat in (alt.hconcat(chart1, chart2), alt.vconcat(chart1, chart2), alt.concat(chart1, chart2)):
+    for concat in (
+        alt.hconcat(chart1, chart2),
+        alt.vconcat(chart1, chart2),
+        alt.concat(chart1, chart2),
+    ):
         result = _execution_result(
-            block_type=BlockType.CHART, raw_value=concat, raw_type_name=type(concat).__name__
+            block_type=BlockType.CHART,
+            raw_value=concat,
+            raw_type_name=type(concat).__name__,
         )
         validation = validate_typed_result(result)
         assert validation.ok is True
@@ -137,10 +144,13 @@ def test_validate_typed_result_rejects_missing_chart_expression() -> None:
 
     assert validation.ok is False
     assert validation.issues[0].code == "chart-output-missing"
-    assert validation.issues[0].message == "chart block must return an Altair chart object"
+    assert (
+        validation.issues[0].message == "chart block must return an Altair chart object"
+    )
 
 
 # --- Table Tests ---
+
 
 def test_validate_typed_result_accepts_valid_table_result() -> None:
     frame = pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]})
@@ -188,6 +198,7 @@ def test_validate_typed_result_rejects_missing_table_expression() -> None:
 
 # --- Assertion and Assertion Diagnostics Tests ---
 
+
 def test_assert_valid_typed_result_raises_structured_error_for_invalid_output() -> None:
     result = _execution_result(
         block_type=BlockType.TABLE,
@@ -230,8 +241,16 @@ def test_assert_valid_typed_result_uses_raw_type_name_when_value_missing() -> No
 def test_coerce_typed_result_raises_type_error_on_invalid_value() -> None:
     from mdcc.validator import _coerce_typed_result
 
-    with pytest.raises(TypeError, match="chart output must be validated before coercion"):
-        _coerce_typed_result(_execution_result(block_type=BlockType.CHART, raw_value="text"))
+    with pytest.raises(
+        TypeError, match="chart output must be validated before coercion"
+    ):
+        _coerce_typed_result(
+            _execution_result(block_type=BlockType.CHART, raw_value="text")
+        )
 
-    with pytest.raises(TypeError, match="table output must be validated before coercion"):
-        _coerce_typed_result(_execution_result(block_type=BlockType.TABLE, raw_value="text"))
+    with pytest.raises(
+        TypeError, match="table output must be validated before coercion"
+    ):
+        _coerce_typed_result(
+            _execution_result(block_type=BlockType.TABLE, raw_value="text")
+        )

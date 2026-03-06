@@ -381,7 +381,7 @@ Begins after renderers are available.
 
 ---
 
-## T16 — Intermediate Document Rendering
+## T16 — Intermediate Document Rendering (DONE)
 Implement rendering of the assembled document into the intermediate representation used before PDF generation.
 
 ### Scope
@@ -618,7 +618,7 @@ Primarily later-stage testing.
 
 ---
 
-## T27 — Diagnostics and Failure-Mode Tests
+## T27 — Diagnostics and Failure-Mode Tests (DONE)
 Create tests covering failure classification and reporting.
 
 ### Scope
