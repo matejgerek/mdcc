@@ -1,7 +1,8 @@
 # Agent-First Executable Report Compiler — Technical Specification
 
 ## Status
-Draft MVP specification for implementation.
+**FINISHED** (as of commit `b2366360bfe16fd6a7d3429efc5e1d80b6a7b703`)
+Implementation of the MVP is complete.
 
 ## Purpose
 Define a minimal, deterministic, agent-friendly document compiler that turns a single source file containing markdown narrative and executable analysis blocks into a PDF.
