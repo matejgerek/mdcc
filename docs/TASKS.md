@@ -359,7 +359,7 @@ Can begin relatively early and be integrated by several later tasks.
 
 ---
 
-## T15 — Narrative Rendering and Document Assembly Model
+## T15 — Narrative Rendering and Document Assembly Model (DONE)
 Implement the stage that combines markdown narrative with rendered executable-block artifacts into a unified final document representation.
 
 ### Scope
