@@ -11,7 +11,7 @@ from typing import Annotated, Optional
 import typer
 
 from mdcc import __version__
-from mdcc.errors import MdccError
+from mdcc.errors import MdccError, format_diagnostic, format_unexpected_error
 from mdcc.compile import CompileOptions, compile as run_compile
 
 # ---------------------------------------------------------------------------
@@ -124,10 +124,10 @@ def compile(
     try:
         run_compile(options)
     except MdccError as exc:
-        _report_mdcc_error(exc)
+        _report_mdcc_error(exc, verbose=verbose)
         raise typer.Exit(code=1) from exc
     except Exception as exc:
-        _report_unexpected_error(exc)
+        _report_unexpected_error(exc, verbose=verbose)
         raise typer.Exit(code=1) from exc
 
     if verbose:
@@ -139,38 +139,14 @@ def compile(
 # ---------------------------------------------------------------------------
 
 
-def _report_mdcc_error(exc: MdccError) -> None:
+def _report_mdcc_error(exc: MdccError, *, verbose: bool) -> None:
     """Format a compiler error for the terminal."""
-    diag = exc.diagnostic
-    parts: list[str] = []
-
-    parts.append(f"error: {diag.message}")
-
-    if diag.source_path:
-        loc = f"  → file: {diag.source_path}"
-        if diag.block_index is not None:
-            loc += f"  block #{diag.block_index}"
-        if diag.block_type:
-            loc += f"  ({diag.block_type})"
-        parts.append(loc)
-
-    parts.append(f"  stage: {diag.stage}")
-
-    if diag.source_snippet:
-        parts.append(f"  snippet: {diag.source_snippet}")
-
-    if diag.stderr:
-        parts.append(f"  stderr:\n{diag.stderr}")
-
-    typer.echo("\n".join(parts), err=True)
+    typer.echo(format_diagnostic(exc.diagnostic, verbose=verbose), err=True)
 
 
-def _report_unexpected_error(exc: Exception) -> None:
+def _report_unexpected_error(exc: Exception, *, verbose: bool) -> None:
     """Format an unexpected (non-MdccError) exception for the terminal."""
-    typer.echo(
-        f"error: unexpected failure — {type(exc).__name__}: {exc}",
-        err=True,
-    )
+    typer.echo(format_unexpected_error(exc, verbose=verbose), err=True)
 
 
 if __name__ == "__main__":

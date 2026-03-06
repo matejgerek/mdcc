@@ -216,10 +216,102 @@ class DiagnosticCollector:
         )
 
 
+def format_diagnostic(diagnostic: Diagnostic, *, verbose: bool = False) -> str:
+    lines = [f"error: {diagnostic.message}", f"  stage: {diagnostic.stage.value}"]
+
+    if verbose:
+        lines.append(f"  category: {diagnostic.category.value}")
+
+    if diagnostic.source_path is not None:
+        lines.append(f"  file: {diagnostic.source_path}")
+
+    block_reference = _format_block_reference(diagnostic)
+    if block_reference is not None:
+        lines.append(f"  block: {block_reference}")
+
+    location = _format_location(diagnostic.location)
+    if location is not None:
+        lines.append(f"  location: {location}")
+
+    snippet = diagnostic.source_snippet or (
+        diagnostic.location.snippet if diagnostic.location is not None else None
+    )
+    if snippet:
+        lines.extend(_format_multiline_field("snippet", snippet))
+
+    if diagnostic.expected_output_type is not None:
+        lines.append(f"  expected: {diagnostic.expected_output_type}")
+
+    if diagnostic.actual_output_type is not None:
+        lines.append(f"  actual: {diagnostic.actual_output_type}")
+
+    if diagnostic.stderr:
+        lines.extend(_format_multiline_field("stderr", diagnostic.stderr))
+
+    if verbose and diagnostic.stdout:
+        lines.extend(_format_multiline_field("stdout", diagnostic.stdout))
+
+    if verbose and diagnostic.exception_type is not None:
+        if diagnostic.exception_message:
+            lines.append(
+                f"  caused by: {diagnostic.exception_type}: {diagnostic.exception_message}"
+            )
+        else:
+            lines.append(f"  caused by: {diagnostic.exception_type}")
+
+    if verbose and diagnostic.duration_ms is not None:
+        lines.append(f"  duration_ms: {diagnostic.duration_ms:.2f}")
+
+    return "\n".join(lines)
+
+
+def format_unexpected_error(exc: Exception, *, verbose: bool = False) -> str:
+    lines = [f"error: unexpected failure — {type(exc).__name__}: {exc}"]
+    if verbose:
+        lines.append("  stage: internal")
+    return "\n".join(lines)
+
+
+def _format_block_reference(diagnostic: Diagnostic) -> str | None:
+    parts: list[str] = []
+    if diagnostic.block_index is not None:
+        parts.append(f"#{diagnostic.block_index}")
+    if diagnostic.block_id is not None:
+        parts.append(diagnostic.block_id)
+    if diagnostic.block_type is not None:
+        parts.append(f"({diagnostic.block_type.value})")
+    return " ".join(parts) if parts else None
+
+
+def _format_location(location: SourceLocation | None) -> str | None:
+    if location is None or location.span is None:
+        return None
+
+    start = location.span.start
+    end = location.span.end
+    if (start.line, start.column) == (end.line, end.column):
+        return f"line {start.line}:{start.column}"
+    if start.line == end.line:
+        return f"line {start.line}:{start.column}-{end.column}"
+    return f"lines {start.line}:{start.column}-{end.line}:{end.column}"
+
+
+def _format_multiline_field(label: str, value: str) -> list[str]:
+    stripped = value.rstrip()
+    if "\n" not in stripped:
+        return [f"  {label}: {stripped}"]
+
+    lines = [f"  {label}:"]
+    lines.extend(f"    {line}" for line in stripped.splitlines())
+    return lines
+
+
 __all__ = [
     "DiagnosticCollector",
     "ErrorContext",
     "ExecutionError",
+    "format_diagnostic",
+    "format_unexpected_error",
     "MdccError",
     "ParseError",
     "PdfGenerationError",

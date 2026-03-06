@@ -11,7 +11,15 @@ from mdcc import __version__
 from mdcc.cli import app
 from mdcc.errors import MdccError
 from mdcc.compile import CompileOptions
-from mdcc.models import Diagnostic, DiagnosticCategory, DiagnosticStage
+from mdcc.models import (
+    BlockType,
+    Diagnostic,
+    DiagnosticCategory,
+    DiagnosticStage,
+    SourceLocation,
+    SourcePosition,
+    SourceSpan,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +176,64 @@ def test_compile_surfaces_mdcc_error(
 
     assert result.exit_code == 1
     assert "unclosed fenced block" in result.output
+    assert "stage: parse" in result.output
+    assert f"file: {tmp_source_file}" in result.output
+
+
+def test_compile_formats_diagnostic_context_for_humans(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    diagnostic = Diagnostic(
+        stage=DiagnosticStage.VALIDATION,
+        category=DiagnosticCategory.VALIDATION_ERROR,
+        message="table output type mismatch",
+        source_path=tmp_source_file,
+        block_id="block-0002",
+        block_type=BlockType.TABLE,
+        block_index=1,
+        location=SourceLocation(
+            source_path=tmp_source_file,
+            span=SourceSpan(
+                start=SourcePosition(line=12, column=1),
+                end=SourcePosition(line=15, column=3),
+            ),
+        ),
+        source_snippet="```mdcc_table\n42\n```",
+    )
+    error = MdccError(diagnostic)
+
+    with patch("mdcc.cli.run_compile", side_effect=error):
+        result = cli_runner.invoke(app, ["compile", str(tmp_source_file)])
+
+    assert result.exit_code == 1
+    assert "block: #1 block-0002 (mdcc_table)" in result.output
+    assert "location: lines 12:1-15:3" in result.output
+    assert "snippet:" in result.output
+
+
+def test_compile_verbose_includes_diagnostic_details(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    diagnostic = Diagnostic(
+        stage=DiagnosticStage.EXECUTION,
+        category=DiagnosticCategory.EXECUTION_ERROR,
+        message="block execution failed",
+        source_path=tmp_source_file,
+        stderr="traceback line",
+        stdout="debug print",
+        exception_type="RuntimeError",
+        exception_message="boom",
+    )
+    error = MdccError(diagnostic)
+
+    with patch("mdcc.cli.run_compile", side_effect=error):
+        result = cli_runner.invoke(app, ["compile", str(tmp_source_file), "--verbose"])
+
+    assert result.exit_code == 1
+    assert "category: execution_error" in result.output
+    assert "stderr: traceback line" in result.output
+    assert "stdout: debug print" in result.output
+    assert "caused by: RuntimeError: boom" in result.output
 
 
 def test_compile_surfaces_unexpected_error(
@@ -180,3 +246,15 @@ def test_compile_surfaces_unexpected_error(
     assert result.exit_code == 1
     assert "unexpected failure" in result.output
     assert "boom" in result.output
+
+
+def test_compile_verbose_surfaces_unexpected_error_stage(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    with patch("mdcc.cli.run_compile", side_effect=RuntimeError("boom")):
+        result = cli_runner.invoke(
+            app, ["compile", str(tmp_source_file), "--verbose"]
+        )
+
+    assert result.exit_code == 1
+    assert "stage: internal" in result.output

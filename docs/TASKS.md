@@ -442,7 +442,7 @@ Should start early. Multiple other tasks will use it.
 
 ---
 
-## T19 — Human-Readable Diagnostic Reporting
+## T19 — Human-Readable Diagnostic Reporting (DONE)
 Implement compiler-facing diagnostic presentation for human users.
 
 ### Scope
