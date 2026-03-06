@@ -374,4 +374,3 @@ def test_diagnostic_precision_for_policy_violation(tmp_path: Path) -> None:
     # Let's verify the exact line number calculated by AST logic.
     assert diagnostic.location.span.start.line == 6
     assert "import sys" in diagnostic.source_snippet
-

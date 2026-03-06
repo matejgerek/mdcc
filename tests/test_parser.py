@@ -199,4 +199,3 @@ def test_parser_nested_markdown_blocks() -> None:
     assert isinstance(document.nodes[0], MarkdownNode)
     assert document.nodes[0].kind == "markdown"
     assert "```mdcc_chart" in document.nodes[0].text
-

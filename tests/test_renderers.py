@@ -9,16 +9,23 @@ import vl_convert as vlc
 
 from mdcc.errors import RenderingError
 from mdcc.models import (
+    AssembledDocumentNode,
     ArtifactKind,
     BlockType,
     ChartResult,
+    DocumentModel,
     ExecutableBlockNode,
+    Frontmatter,
+    MarkdownNode,
+    NodeKind,
+    RenderedArtifact,
     SourceLocation,
     SourcePosition,
     SourceSpan,
     TableResult,
 )
 from mdcc.renderers import (
+    assemble_document,
     render_chart_artifact,
     render_table_artifact,
     render_typed_result,
@@ -60,6 +67,20 @@ def _block(
     )
 
 
+def _markdown_node(
+    *,
+    source_path: Path,
+    node_id: str,
+    line: int,
+    text: str,
+) -> MarkdownNode:
+    return MarkdownNode(
+        node_id=node_id,
+        text=text,
+        location=_location(source_path, line, text.strip()),
+    )
+
+
 def _chart_result(tmp_path: Path) -> ChartResult:
     source = _source_file(tmp_path)
     block = _block(
@@ -86,6 +107,53 @@ def _table_result(tmp_path: Path) -> TableResult:
     )
     frame = pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]})
     return TableResult(block=block, value=frame)
+
+
+def _chart_and_table_document(
+    tmp_path: Path,
+) -> tuple[DocumentModel, ChartResult, TableResult, BuildContext]:
+    source = _source_file(tmp_path)
+    intro = _markdown_node(
+        source_path=source,
+        node_id="node-0001",
+        line=1,
+        text="# Intro\n",
+    )
+    chart_block = _block(
+        source_path=source,
+        index=0,
+        block_type=BlockType.CHART,
+        code="chart",
+    )
+    bridge = _markdown_node(
+        source_path=source,
+        node_id="node-0002",
+        line=3,
+        text="Bridge paragraph\n",
+    )
+    table_block = _block(
+        source_path=source,
+        index=1,
+        block_type=BlockType.TABLE,
+        code="frame",
+    )
+    document = DocumentModel(
+        source_path=source,
+        frontmatter=Frontmatter(title="Report"),
+        nodes=[intro, chart_block, bridge, table_block],
+    )
+    chart = (
+        alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
+        .mark_line()
+        .encode(x="x", y="y")
+    )
+    chart_result = ChartResult(block=chart_block, value=chart, spec=chart.to_dict())
+    table_result = TableResult(
+        block=table_block,
+        value=pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]}),
+    )
+    build_context = BuildContext.create(source, keep=True)
+    return document, chart_result, table_result, build_context
 
 
 def test_render_chart_artifact_writes_svg_and_preserves_block_metadata(
@@ -241,3 +309,122 @@ def test_render_table_artifact_raises_structured_rendering_error(
     assert diagnostic.source_snippet == result.block.location.snippet
     assert diagnostic.exception_type == "OSError"
     assert diagnostic.exception_message == "disk full"
+
+
+def test_assemble_document_interleaves_markdown_and_artifacts_in_order(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    artifacts = [
+        render_chart_artifact(chart_result, build_context),
+        render_table_artifact(table_result, build_context),
+    ]
+
+    assembled = assemble_document(document, artifacts)
+
+    assert assembled.source_path == document.source_path
+    assert assembled.frontmatter == document.frontmatter
+    assert [node.kind for node in assembled.nodes] == [
+        NodeKind.MARKDOWN,
+        NodeKind.RENDERED_ARTIFACT,
+        NodeKind.MARKDOWN,
+        NodeKind.RENDERED_ARTIFACT,
+    ]
+    assert isinstance(document.nodes[0], MarkdownNode)
+    assert isinstance(document.nodes[2], MarkdownNode)
+    assert assembled.nodes[0] == AssembledDocumentNode(
+        kind=NodeKind.MARKDOWN,
+        markdown=document.nodes[0],
+    )
+    assert assembled.nodes[1].artifact == artifacts[0]
+    assert assembled.nodes[2] == AssembledDocumentNode(
+        kind=NodeKind.MARKDOWN,
+        markdown=document.nodes[2],
+    )
+    assert assembled.nodes[3].artifact == artifacts[1]
+
+
+def test_assemble_document_raises_when_rendered_artifact_is_missing(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, _, build_context = _chart_and_table_document(tmp_path)
+    artifacts = [render_chart_artifact(chart_result, build_context)]
+
+    with pytest.raises(RenderingError) as exc_info:
+        assemble_document(document, artifacts)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.message == "missing rendered artifact for executable block"
+    assert diagnostic.block_id == "block-0002"
+    assert diagnostic.block_type is BlockType.TABLE
+    assert diagnostic.block_index == 1
+
+
+def test_assemble_document_raises_for_duplicate_artifacts(tmp_path: Path) -> None:
+    document, chart_result, _, build_context = _chart_and_table_document(tmp_path)
+    artifact = render_chart_artifact(chart_result, build_context)
+
+    with pytest.raises(RenderingError) as exc_info:
+        assemble_document(document, [artifact, artifact])
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.message == "duplicate rendered artifact for executable block"
+    assert diagnostic.block_id == chart_result.block.node_id
+
+
+def test_assemble_document_raises_for_extra_artifact_not_in_document(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, _, build_context = _chart_and_table_document(tmp_path)
+    artifact = render_chart_artifact(chart_result, build_context)
+    extra_block = _block(
+        source_path=document.source_path,
+        index=2,
+        block_type=BlockType.TABLE,
+        code="orphan_frame",
+    )
+    extra_artifact = RenderedArtifact(
+        artifact_id="table-block-9999",
+        kind=ArtifactKind.TABLE,
+        block=extra_block,
+        path=build_context.table_path(2, ".html"),
+        html="<table></table>",
+        mime_type="text/html",
+    )
+
+    with pytest.raises(RenderingError) as exc_info:
+        assemble_document(document, [artifact, extra_artifact])
+
+    diagnostic = exc_info.value.diagnostic
+    assert (
+        diagnostic.message
+        == "rendered artifact does not correspond to an executable block in the document"
+    )
+    assert diagnostic.block_id == extra_block.node_id
+
+
+def test_assemble_document_raises_for_mismatched_artifact_block_metadata(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, _, build_context = _chart_and_table_document(tmp_path)
+    artifact = render_chart_artifact(chart_result, build_context)
+    mismatched_block = ExecutableBlockNode(
+        node_id=chart_result.block.node_id,
+        block_type=BlockType.TABLE,
+        code=chart_result.block.code,
+        block_index=chart_result.block.block_index,
+        location=chart_result.block.location,
+    )
+    mismatched_artifact = artifact.model_copy(update={"block": mismatched_block})
+
+    with pytest.raises(RenderingError) as exc_info:
+        assemble_document(document, [mismatched_artifact])
+
+    diagnostic = exc_info.value.diagnostic
+    assert (
+        diagnostic.message
+        == "rendered artifact block metadata does not match parsed document block"
+    )
+    assert diagnostic.block_id == chart_result.block.node_id

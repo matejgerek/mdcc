@@ -111,4 +111,3 @@ def test_frontmatter_type_mismatch() -> None:
     # Verify we surface a validation error gracefully.
     assert diagnostic.message == "frontmatter failed validation"
     assert "Input should be a valid string" in str(diagnostic.exception_message)
-
