@@ -2,16 +2,31 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+import altair as alt
+import pandas as pd
+
 from mdcc.errors import ErrorContext, ValidationError
 from mdcc.models import (
     BlockType,
+    BlockExecutionResult,
+    ChartResult,
     DocumentModel,
     ExecutableBlockNode,
     Frontmatter,
     MarkdownNode,
+    TableResult,
+    TypedBlockResult,
     ValidationIssue,
     ValidationResult,
     ValidationSeverity,
+)
+
+_SUPPORTED_CHART_TYPES = (
+    alt.Chart,
+    alt.LayerChart,
+    alt.ConcatChart,
+    alt.HConcatChart,
+    alt.VConcatChart,
 )
 
 
@@ -37,6 +52,27 @@ def assert_valid_document_structure(document: DocumentModel) -> DocumentModel:
         return document
 
     raise _build_validation_error(document, result.issues)
+
+
+def validate_typed_result(
+    result: BlockExecutionResult,
+) -> ValidationResult[TypedBlockResult]:
+    issue = _typed_result_issue(result)
+    if issue is not None:
+        return ValidationResult(ok=False, issues=[issue])
+
+    return ValidationResult(ok=True, value=_coerce_typed_result(result))
+
+
+def assert_valid_typed_result(result: BlockExecutionResult) -> TypedBlockResult:
+    validation = validate_typed_result(result)
+    if validation.ok and validation.value is not None:
+        return validation.value
+
+    raise _build_typed_result_validation_error(
+        result,
+        validation.issues[0],
+    )
 
 
 def _validate_frontmatter(
@@ -209,4 +245,116 @@ def _format_issue_summary(issues: list[ValidationIssue]) -> str:
     return "; ".join(f"{issue.code}: {issue.message}" for issue in issues)
 
 
-__all__ = ["assert_valid_document_structure", "validate_document_structure"]
+def _typed_result_issue(result: BlockExecutionResult) -> ValidationIssue | None:
+    if result.block.block_type is BlockType.CHART:
+        if isinstance(result.raw_value, _SUPPORTED_CHART_TYPES):
+            return None
+        return _build_typed_result_issue(
+            result,
+            code="chart-output-missing"
+            if _is_missing_final_expression(result)
+            else "chart-output-invalid-type",
+            message="chart block must return an Altair chart object",
+        )
+
+    if result.block.block_type is BlockType.TABLE:
+        if isinstance(result.raw_value, pd.DataFrame):
+            return None
+        return _build_typed_result_issue(
+            result,
+            code="table-output-missing"
+            if _is_missing_final_expression(result)
+            else "table-output-invalid-type",
+            message="table block must return a pandas DataFrame",
+        )
+
+    return _build_typed_result_issue(
+        result,
+        code="block-output-invalid-type",
+        message="executable block returned an unsupported output type",
+    )
+
+
+def _build_typed_result_issue(
+    result: BlockExecutionResult,
+    *,
+    code: str,
+    message: str,
+) -> ValidationIssue:
+    return ValidationIssue(
+        severity=ValidationSeverity.ERROR,
+        code=code,
+        message=message,
+        location=result.block.location,
+    )
+
+
+def _coerce_typed_result(result: BlockExecutionResult) -> TypedBlockResult:
+    if result.block.block_type is BlockType.CHART:
+        chart = result.raw_value
+        if not isinstance(chart, _SUPPORTED_CHART_TYPES):
+            msg = "chart output must be validated before coercion"
+            raise TypeError(msg)
+        return ChartResult(block=result.block, value=chart, spec=chart.to_dict())
+
+    table = result.raw_value
+    if not isinstance(table, pd.DataFrame):
+        msg = "table output must be validated before coercion"
+        raise TypeError(msg)
+    return TableResult(block=result.block, value=table)
+
+
+def _build_typed_result_validation_error(
+    result: BlockExecutionResult,
+    issue: ValidationIssue,
+) -> ValidationError:
+    return ValidationError.from_message(
+        issue.message,
+        context=ErrorContext(
+            source_path=result.block.location.source_path
+            if result.block.location is not None
+            else None,
+            block_id=result.block.node_id,
+            block_type=result.block.block_type,
+            block_index=result.block.block_index,
+            location=issue.location,
+        ),
+        source_snippet=result.block.location.snippet
+        if result.block.location is not None
+        else None,
+        stdout=result.streams.stdout,
+        stderr=result.streams.stderr,
+        duration_ms=result.timing.duration_ms,
+        expected_output_type=_expected_output_type(result.block.block_type),
+        actual_output_type=_actual_output_type(result),
+        exception_message=issue.code,
+    )
+
+
+def _expected_output_type(block_type: BlockType) -> str:
+    if block_type is BlockType.CHART:
+        return "Altair chart object"
+    if block_type is BlockType.TABLE:
+        return "pandas.DataFrame"
+    return "supported executable block output"
+
+
+def _actual_output_type(result: BlockExecutionResult) -> str:
+    if result.raw_type_name is not None:
+        return result.raw_type_name
+    if result.raw_value is not None:
+        value_type = type(result.raw_value)
+        return f"{value_type.__module__}.{value_type.__name__}"
+    return "missing final expression"
+
+
+def _is_missing_final_expression(result: BlockExecutionResult) -> bool:
+    return result.raw_value is None and result.raw_type_name is None
+
+
+__all__ = [
+    "assert_valid_document_structure",
+    "assert_valid_typed_result",
+    "validate_document_structure",
+    "validate_typed_result",
+]

@@ -100,4 +100,8 @@ def build_no_expression_epilogue() -> str:
     return _NO_EXPR_EPILOGUE
 
 
-__all__ = ["build_no_expression_epilogue", "build_result_epilogue", "build_runtime_prelude"]
+__all__ = [
+    "build_no_expression_epilogue",
+    "build_result_epilogue",
+    "build_runtime_prelude",
+]

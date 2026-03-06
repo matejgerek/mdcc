@@ -130,7 +130,7 @@ class TestRewriteLastExpression:
         assert "_mdcc_save_result" in epilogue
 
     def test_function_call_as_last_expression(self) -> None:
-        code = 'data = [1, 2, 3]\nlen(data)\n'
+        code = "data = [1, 2, 3]\nlen(data)\n"
         user_code, epilogue = _rewrite_last_expression(code)
         assert "data = [1, 2, 3]" in user_code
         assert "len(data)" in epilogue
@@ -163,7 +163,12 @@ class TestResultEnvelope:
 
     def test_read_valid_envelope(self, tmp_path: Path) -> None:
         path = tmp_path / "result.pkl"
-        envelope = {"has_value": True, "type_name": "int", "type_module": "builtins", "value": 42}
+        envelope = {
+            "has_value": True,
+            "type_name": "int",
+            "type_module": "builtins",
+            "value": 42,
+        }
         path.write_bytes(pickle.dumps(envelope))
         result = read_result_envelope(path)
         assert result is not None
@@ -171,7 +176,12 @@ class TestResultEnvelope:
 
     def test_extract_raw_value_with_value(self, tmp_path: Path) -> None:
         path = tmp_path / "result.pkl"
-        envelope = {"has_value": True, "type_name": "int", "type_module": "builtins", "value": 99}
+        envelope = {
+            "has_value": True,
+            "type_name": "int",
+            "type_module": "builtins",
+            "value": 99,
+        }
         path.write_bytes(pickle.dumps(envelope))
         value, type_name = extract_raw_value(path)
         assert value == 99
@@ -294,9 +304,7 @@ class TestStreamsSeparation:
         assert result.raw_type_name == "builtins.int"
 
     def test_stderr_and_value_are_separated(self, tmp_path: Path) -> None:
-        code = (
-            "import sys\n"  # This would fail with policy — use prelude-safe variant
-        )
+        code = "import sys\n"  # This would fail with policy — use prelude-safe variant
         # Instead, generate stderr via warnings
         code = 'import warnings; warnings.warn("test warning")\n42\n'
         # Actually, user imports are not allowed, so use a different approach.
@@ -308,11 +316,7 @@ class TestStreamsSeparation:
         assert "debug" in result.streams.stdout
 
     def test_multiple_prints_then_expression(self, tmp_path: Path) -> None:
-        code = (
-            'print("line 1", flush=True)\n'
-            'print("line 2", flush=True)\n'
-            "100 + 200\n"
-        )
+        code = 'print("line 1", flush=True)\nprint("line 2", flush=True)\n100 + 200\n'
         result = _run_block(tmp_path, code)
         assert result.status is ExecutionStatus.SUCCESS
         assert result.streams.stdout == "line 1\nline 2\n"
@@ -334,11 +338,7 @@ class TestDataFrameCapture:
         assert len(result.raw_value) == 3
 
     def test_dataframe_after_manipulation(self, tmp_path: Path) -> None:
-        code = (
-            'df = pd.DataFrame({"x": np.arange(5)})\n'
-            'df["y"] = df["x"] ** 2\n'
-            "df\n"
-        )
+        code = 'df = pd.DataFrame({"x": np.arange(5)})\ndf["y"] = df["x"] ** 2\ndf\n'
         result = _run_block(tmp_path, code, block_type=BlockType.TABLE)
         assert result.status is ExecutionStatus.SUCCESS
         assert result.raw_type_name is not None
