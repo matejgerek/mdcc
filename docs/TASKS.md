@@ -277,7 +277,7 @@ Can proceed in parallel with renderer tasks if contracts are synchronized.
 
 ---
 
-## T11 — Typed Result Validator
+## T11 — Typed Result Validator (DONE)
 Implement validation that block outputs match their required contracts.
 
 ### Scope
