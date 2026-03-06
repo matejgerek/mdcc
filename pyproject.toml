@@ -1,0 +1,27 @@
+[project]
+name = "mdcc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "altair>=6.0.0",
+    "jinja2>=3.1.6",
+    "mistune>=3.2.0",
+    "numpy>=2.4.2",
+    "pandas>=3.0.1",
+    "pydantic>=2.12.5",
+    "typer>=0.24.1",
+    "vl-convert-python>=1.9.0.post1",
+    "weasyprint>=68.1",
+]
+
+[project.scripts]
+mdcc = "mdcc.cli:app"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.0.2",
+    "ruff>=0.15.5",
+]
