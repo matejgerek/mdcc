@@ -14,6 +14,19 @@ This document intentionally:
 
 ---
 
+# 0. Task Tracking
+
+Tasks are tracked using status markers in their headers.
+
+- **(DONE)**: The task is fully implemented, scaffolds are created, and baseline functionality/tests for that unit are established.
+- **(IN PROGRESS)**: A coding agent is currently working on this task.
+- **(BLOCKED)**: The task is waiting on dependencies or a design decision.
+- **(NO MARKER)**: The task is pending.
+
+When a task is marked as **(DONE)**, it means downstream tasks can safely build upon its output or interfaces.
+
+---
+
 # 1. Task Breakdown Principles
 
 ## 1.1 Objectives
@@ -42,7 +55,7 @@ Each task should ideally have:
 
 # 2. Task Overview
 
-## T01 — Project Scaffold and Repository Baseline
+## T01 — Project Scaffold and Repository Baseline (DONE)
 Create the baseline project structure for the CLI application and establish the initial repository layout needed for all later tasks.
 
 ### Scope
