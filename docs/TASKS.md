@@ -339,7 +339,7 @@ Can proceed in parallel with T12.
 
 ---
 
-## T14 — Temporary Build Artifact Management
+## T14 — Temporary Build Artifact Management (DONE)
 Implement management of intermediate build assets used during compilation.
 
 ### Scope
