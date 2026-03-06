@@ -122,7 +122,7 @@ Can run in parallel with some other early tasks.
 
 ---
 
-## T04 — Markdown and Executable Block Parser
+## T04 — Markdown and Executable Block Parser (DONE)
 Implement parsing of markdown narrative and fenced executable blocks into an internal document representation.
 
 ### Scope
