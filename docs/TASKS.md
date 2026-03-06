@@ -401,7 +401,7 @@ Depends on assembly output.
 
 ---
 
-## T17 — PDF Generation Stage
+## T17 — PDF Generation Stage (DONE)
 Implement the final PDF production step.
 
 ### Scope
