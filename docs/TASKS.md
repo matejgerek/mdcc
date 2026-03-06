@@ -256,7 +256,7 @@ Can be implemented alongside or immediately after the execution runner.
 
 ---
 
-## T10 — Final Expression Capture and Typed Result Extraction
+## T10 — Final Expression Capture and Typed Result Extraction (DONE)
 Implement capture of the block’s final expression result and prepare it for typed validation.
 
 ### Scope

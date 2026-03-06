@@ -5,6 +5,7 @@ import sys
 import time
 
 from mdcc.errors import ErrorContext, ExecutionError, TimeoutError
+from mdcc.executor.result import extract_raw_value
 from mdcc.models import (
     BlockExecutionResult,
     ExecutionPayload,
@@ -74,6 +75,9 @@ def run_payload(
             exception_message=f"subprocess exited with status {completed.returncode}",
         )
 
+    # ── T10: extract final expression result ──
+    raw_value, raw_type_name = extract_raw_value(payload.result_path)
+
     return BlockExecutionResult(
         block=payload.block,
         status=ExecutionStatus.SUCCESS,
@@ -82,6 +86,8 @@ def run_payload(
             duration_ms=duration_ms,
             timeout_seconds=timeout_seconds,
         ),
+        raw_value=raw_value,
+        raw_type_name=raw_type_name,
     )
 
 
