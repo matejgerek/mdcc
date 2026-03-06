@@ -554,7 +554,7 @@ Parallelizable with renderer and diagnostics tests.
 
 ---
 
-## T24 — Typed Result Validation Tests
+## T24 — Typed Result Validation Tests (DONE)
 Create tests for semantic output contract enforcement.
 
 ### Scope
