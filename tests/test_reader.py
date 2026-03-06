@@ -82,7 +82,9 @@ def test_parse_frontmatter_requires_mapping_root() -> None:
     assert diagnostic.actual_output_type == "list"
 
 
-def test_read_source_document_raises_read_error_for_missing_file(tmp_path: Path) -> None:
+def test_read_source_document_raises_read_error_for_missing_file(
+    tmp_path: Path,
+) -> None:
     missing = tmp_path / "missing.md"
 
     with pytest.raises(ReadError) as exc_info:

@@ -30,12 +30,14 @@ from mdcc.models import (
 
 
 def test_frontmatter_preserves_unknown_fields_in_extra() -> None:
-    frontmatter = Frontmatter(
-        title="Quarterly update",
-        author="Analyst",
-        date="2026-03-06",
-        team="finance",
-        revision=3,
+    frontmatter = Frontmatter.model_validate(
+        {
+            "title": "Quarterly update",
+            "author": "Analyst",
+            "date": "2026-03-06",
+            "team": "finance",
+            "revision": 3,
+        }
     )
 
     assert frontmatter.title == "Quarterly update"
@@ -73,9 +75,13 @@ def test_chart_result_accepts_altair_chart_objects() -> None:
         code="chart",
         block_index=1,
     )
-    chart = alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]})).mark_line().encode(
-        x="x",
-        y="y",
+    chart = (
+        alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
+        .mark_line()
+        .encode(
+            x="x",
+            y="y",
+        )
     )
 
     result = ChartResult(block=block, value=chart, spec=chart.to_dict())
@@ -108,6 +114,7 @@ def test_validation_result_preserves_typed_value_and_issues() -> None:
     )
 
     assert result.ok is True
+    assert result.value is not None
     assert result.value.title == "Memo"
     assert result.issues == [issue]
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 from typer.testing import CliRunner
 
 from mdcc import __version__
@@ -129,9 +128,7 @@ def test_compile_passes_verbose_flag(
         captured_options.append(options)
 
     with patch("mdcc.cli.run_compile", side_effect=_capture):
-        result = cli_runner.invoke(
-            app, ["compile", str(tmp_source_file), "--verbose"]
-        )
+        result = cli_runner.invoke(app, ["compile", str(tmp_source_file), "--verbose"])
 
     assert result.exit_code == 0
     assert captured_options[0].verbose is True

@@ -15,14 +15,18 @@ from mdcc.models import (
 )
 
 
-def validate_document_structure(document: DocumentModel) -> ValidationResult[DocumentModel]:
+def validate_document_structure(
+    document: DocumentModel,
+) -> ValidationResult[DocumentModel]:
     issues: list[ValidationIssue] = []
     issues.extend(_validate_frontmatter(document.frontmatter, document.source_path))
     issues.extend(_validate_nodes(document))
 
     return ValidationResult(
         ok=not any(issue.severity is ValidationSeverity.ERROR for issue in issues),
-        value=document if not any(issue.severity is ValidationSeverity.ERROR for issue in issues) else None,
+        value=document
+        if not any(issue.severity is ValidationSeverity.ERROR for issue in issues)
+        else None,
         issues=issues,
     )
 
@@ -166,7 +170,9 @@ def _validate_executable_indices(
     expected_indices = list(range(len(executable_indices)))
 
     if executable_indices != expected_indices:
-        first_block = next((node for node in nodes if isinstance(node, ExecutableBlockNode)), None)
+        first_block = next(
+            (node for node in nodes if isinstance(node, ExecutableBlockNode)), None
+        )
         issues.append(
             ValidationIssue(
                 severity=ValidationSeverity.ERROR,
@@ -185,7 +191,9 @@ def _build_validation_error(
     document: DocumentModel,
     issues: list[ValidationIssue],
 ) -> ValidationError:
-    error_issues = [issue for issue in issues if issue.severity is ValidationSeverity.ERROR]
+    error_issues = [
+        issue for issue in issues if issue.severity is ValidationSeverity.ERROR
+    ]
     primary_issue = error_issues[0] if error_issues else issues[0]
     return ValidationError.from_message(
         primary_issue.message,

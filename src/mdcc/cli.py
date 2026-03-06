@@ -5,8 +5,6 @@ pipeline from a single markdown source file to a PDF.
 """
 
 from __future__ import annotations
-
-import sys
 from pathlib import Path
 from typing import Annotated, Optional
 
@@ -31,6 +29,7 @@ app = typer.Typer(
 # ---------------------------------------------------------------------------
 # Version callback
 # ---------------------------------------------------------------------------
+
 
 def _version_callback(value: bool) -> None:
     if value:
@@ -57,6 +56,7 @@ def _main(
 # ---------------------------------------------------------------------------
 # compile command
 # ---------------------------------------------------------------------------
+
 
 def _resolve_output_path(input_path: Path, output: Path | None) -> Path:
     """Derive the output PDF path when the user omits it."""
@@ -137,6 +137,7 @@ def compile(
 # ---------------------------------------------------------------------------
 # Error presentation helpers
 # ---------------------------------------------------------------------------
+
 
 def _report_mdcc_error(exc: MdccError) -> None:
     """Format a compiler error for the terminal."""

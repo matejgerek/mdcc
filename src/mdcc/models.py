@@ -163,7 +163,13 @@ class ChartResult(BaseModel):
 
     category: ArtifactKind = Field(default=ArtifactKind.CHART)
     block: ExecutableBlockNode
-    value: alt.Chart | alt.LayerChart | alt.ConcatChart | alt.HConcatChart | alt.VConcatChart
+    value: (
+        alt.Chart
+        | alt.LayerChart
+        | alt.ConcatChart
+        | alt.HConcatChart
+        | alt.VConcatChart
+    )
     spec: dict[str, Any]
 
 

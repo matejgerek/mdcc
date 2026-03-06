@@ -46,10 +46,12 @@ def test_validate_document_structure_accepts_valid_document() -> None:
     assert result.issues == []
 
 
-def test_validate_document_structure_keeps_warning_for_preserved_frontmatter_extra() -> None:
+def test_validate_document_structure_keeps_warning_for_preserved_frontmatter_extra() -> (
+    None
+):
     document = DocumentModel(
         source_path=Path("report.md"),
-        frontmatter=Frontmatter(title="Memo", team="finance"),
+        frontmatter=Frontmatter.model_validate({"title": "Memo", "team": "finance"}),
         nodes=[
             MarkdownNode(
                 node_id="node-0001",

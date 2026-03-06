@@ -15,7 +15,9 @@ from mdcc.models import (
     SourceSpan,
 )
 
-FENCE_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)$")
+FENCE_RE = re.compile(
+    r"^(?P<indent>[ \t]{0,3})(?P<fence>`{3,}|~{3,})(?P<info>[^\r\n]*)$"
+)
 CLOSE_FENCE_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?P<fence>`{3,}|~{3,})[ \t]*$")
 SUPPORTED_BLOCK_TYPES = {block_type.value: block_type for block_type in BlockType}
 
@@ -49,7 +51,11 @@ def parse_document(source: SourceDocumentInput) -> DocumentModel:
 
     def flush_markdown() -> None:
         nonlocal markdown_node_index, markdown_start_line, markdown_end_line
-        if not markdown_buffer or markdown_start_line is None or markdown_end_line is None:
+        if (
+            not markdown_buffer
+            or markdown_start_line is None
+            or markdown_end_line is None
+        ):
             markdown_buffer.clear()
             markdown_start_line = None
             markdown_end_line = None
@@ -165,7 +171,9 @@ def _is_matching_close(line: str, opener_fence: str) -> bool:
         return False
 
     closing_fence = match.group("fence")
-    return closing_fence[0] == opener_fence[0] and len(closing_fence) >= len(opener_fence)
+    return closing_fence[0] == opener_fence[0] and len(closing_fence) >= len(
+        opener_fence
+    )
 
 
 def _build_location(

@@ -19,13 +19,7 @@ def tmp_source_file(tmp_path: Path) -> Path:
     """Create a minimal valid markdown source file in a temp directory."""
     source = tmp_path / "report.md"
     source.write_text(
-        "---\n"
-        "title: Test Report\n"
-        "---\n"
-        "\n"
-        "# Introduction\n"
-        "\n"
-        "Hello, world.\n",
+        "---\ntitle: Test Report\n---\n\n# Introduction\n\nHello, world.\n",
         encoding="utf-8",
     )
     return source

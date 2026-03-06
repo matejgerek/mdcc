@@ -38,6 +38,5 @@ def compile(options: CompileOptions) -> None:
         Pipeline stages are not yet wired (see T20).
     """
     raise NotImplementedError(
-        "compile is not yet implemented — "
-        "pipeline stages will be wired in T20"
+        "compile is not yet implemented — pipeline stages will be wired in T20"
     )

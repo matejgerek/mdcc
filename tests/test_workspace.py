@@ -14,6 +14,7 @@ from mdcc.utils.workspace import BUILD_DIR_NAME, BuildContext
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _source_file(tmp_path: Path) -> Path:
     """Create a dummy source file inside *tmp_path*."""
     src = tmp_path / "report.md"

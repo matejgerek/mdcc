@@ -5,7 +5,12 @@ from pathlib import Path
 import pytest
 
 from mdcc.errors import ParseError
-from mdcc.models import BlockType, ExecutableBlockNode, MarkdownNode, SourceDocumentInput
+from mdcc.models import (
+    BlockType,
+    ExecutableBlockNode,
+    MarkdownNode,
+    SourceDocumentInput,
+)
 from mdcc.parser import parse_document
 
 
@@ -34,11 +39,15 @@ def test_parse_document_with_markdown_and_executable_blocks() -> None:
         MarkdownNode,
         ExecutableBlockNode,
     ]
-    assert document.nodes[1].block_type is BlockType.CHART
-    assert document.nodes[1].block_index == 0
-    assert document.nodes[1].code == "chart_code()\n"
-    assert document.nodes[3].block_type is BlockType.TABLE
-    assert document.nodes[3].block_index == 1
+    first_block = document.nodes[1]
+    second_block = document.nodes[3]
+    assert isinstance(first_block, ExecutableBlockNode)
+    assert isinstance(second_block, ExecutableBlockNode)
+    assert first_block.block_type is BlockType.CHART
+    assert first_block.block_index == 0
+    assert first_block.code == "chart_code()\n"
+    assert second_block.block_type is BlockType.TABLE
+    assert second_block.block_index == 1
 
 
 def test_parse_document_preserves_regular_markdown_fences() -> None:
@@ -46,12 +55,7 @@ def test_parse_document_preserves_regular_markdown_fences() -> None:
         source_path=Path("report.md"),
         raw_text="",
         body_text=(
-            "```python\n"
-            "print('hello')\n"
-            "```mdcc_chart\n"
-            "still markdown\n"
-            "```\n"
-            "```\n"
+            "```python\nprint('hello')\n```mdcc_chart\nstill markdown\n```\n```\n"
         ),
     )
 
@@ -128,8 +132,7 @@ def test_parse_document_skips_empty_markdown_between_consecutive_blocks() -> Non
         source_path=Path("report.md"),
         raw_text="",
         body_text=(
-            "```mdcc_chart\nchart_code()\n```\n"
-            "```mdcc_table\ntable_code()\n```\n"
+            "```mdcc_chart\nchart_code()\n```\n```mdcc_table\ntable_code()\n```\n"
         ),
     )
 

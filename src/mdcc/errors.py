@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 from mdcc.models import (
     BlockType,
@@ -11,6 +11,8 @@ from mdcc.models import (
     DiagnosticStage,
     SourceLocation,
 )
+
+MdccErrorT = TypeVar("MdccErrorT", bound="MdccError")
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,14 +52,14 @@ class MdccError(Exception):
 
     @classmethod
     def from_message(
-        cls,
+        cls: type[MdccErrorT],
         message: str,
         *,
         context: ErrorContext | None = None,
         stage: DiagnosticStage | None = None,
         category: DiagnosticCategory | None = None,
         **extra: Any,
-    ) -> MdccError:
+    ) -> MdccErrorT:
         resolved_stage = stage or cls.diagnostic_stage()
         resolved_category = category or cls.diagnostic_category()
         if resolved_stage is None or resolved_category is None:
@@ -78,7 +80,7 @@ class MdccError(Exception):
 
     @classmethod
     def from_exception(
-        cls,
+        cls: type[MdccErrorT],
         message: str,
         cause: BaseException,
         *,
@@ -86,7 +88,7 @@ class MdccError(Exception):
         stage: DiagnosticStage | None = None,
         category: DiagnosticCategory | None = None,
         **extra: Any,
-    ) -> MdccError:
+    ) -> MdccErrorT:
         return cls.from_message(
             message,
             context=context,

@@ -41,7 +41,9 @@ def read_source_document(source_path: str | Path) -> SourceDocumentInput:
     )
 
 
-def extract_frontmatter(raw_text: str, source_path: str | Path) -> tuple[str | None, str]:
+def extract_frontmatter(
+    raw_text: str, source_path: str | Path
+) -> tuple[str | None, str]:
     path = Path(source_path)
     lines = raw_text.splitlines(keepends=True)
 
