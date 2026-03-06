@@ -146,7 +146,7 @@ Foundational core task.
 
 ---
 
-## T05 — Structural Validation Layer
+## T05 — Structural Validation Layer (DONE)
 Implement pre-execution validation of the parsed document.
 
 ### Scope
