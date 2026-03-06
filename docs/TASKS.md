@@ -76,7 +76,7 @@ Must start first.
 
 ---
 
-## T02 — Core Domain Models and Shared (DONE) Types
+## T02 — Core Domain Models and Shared Types (DONE)
 Define the shared internal models used across parsing, execution, rendering, diagnostics, and document assembly.
 
 ### Scope
@@ -99,7 +99,7 @@ Should start early. Many later tasks depend on it.
 
 ---
 
-## T03 — Source Reader and Frontmatter Extraction
+## T03 — Source Reader and Frontmatter Extraction (DONE)
 Implement reading source files and extracting optional frontmatter from the document.
 
 ### Scope
@@ -169,7 +169,7 @@ Can proceed once parsing output shapes are available.
 
 ---
 
-## T06 — CLI Surface and Command Wiring
+## T06 — CLI Surface and Command Wiring (DONE)
 Implement the CLI entrypoints required to invoke the compiler.
 
 ### Scope
