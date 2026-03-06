@@ -43,6 +43,7 @@ class TestCreateBuildsDirectoryStructure:
         assert ctx.tables_dir.is_dir()
         assert ctx.payloads_dir.is_dir()
         assert ctx.logs_dir.is_dir()
+        assert ctx.results_dir.is_dir()
 
     def test_build_dir_is_adjacent_to_source(self, tmp_path: Path) -> None:
         src = _source_file(tmp_path)
@@ -82,6 +83,12 @@ class TestPathHelpers:
         ctx = BuildContext.create(src)
         p = ctx.log_path(12)
         assert p == ctx.logs_dir / "log_012.txt"
+
+    def test_result_path(self, tmp_path: Path) -> None:
+        src = _source_file(tmp_path)
+        ctx = BuildContext.create(src)
+        p = ctx.result_path(3)
+        assert p == ctx.results_dir / "result_003.json"
 
 
 class TestContextManagerCleanup:

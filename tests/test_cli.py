@@ -252,9 +252,7 @@ def test_compile_verbose_surfaces_unexpected_error_stage(
     cli_runner: CliRunner, tmp_source_file: Path
 ) -> None:
     with patch("mdcc.cli.run_compile", side_effect=RuntimeError("boom")):
-        result = cli_runner.invoke(
-            app, ["compile", str(tmp_source_file), "--verbose"]
-        )
+        result = cli_runner.invoke(app, ["compile", str(tmp_source_file), "--verbose"])
 
     assert result.exit_code == 1
     assert "stage: internal" in result.output

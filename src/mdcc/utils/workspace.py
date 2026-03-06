@@ -22,6 +22,7 @@ _CHARTS_DIR = "charts"
 _TABLES_DIR = "tables"
 _PAYLOADS_DIR = "payloads"
 _LOGS_DIR = "logs"
+_RESULTS_DIR = "results"
 
 # Default name of the build directory placed next to the source file.
 BUILD_DIR_NAME = ".mdcc_build"
@@ -69,7 +70,7 @@ class BuildContext:
         build_dir = source_path.parent / BUILD_DIR_NAME
         build_dir.mkdir(parents=True, exist_ok=True)
 
-        for sub in (_CHARTS_DIR, _TABLES_DIR, _PAYLOADS_DIR, _LOGS_DIR):
+        for sub in (_CHARTS_DIR, _TABLES_DIR, _PAYLOADS_DIR, _LOGS_DIR, _RESULTS_DIR):
             (build_dir / sub).mkdir(exist_ok=True)
 
         return cls(build_dir, keep=keep)
@@ -102,6 +103,11 @@ class BuildContext:
     def logs_dir(self) -> Path:
         """Directory for block execution logs."""
         return self._build_dir / _LOGS_DIR
+
+    @property
+    def results_dir(self) -> Path:
+        """Directory for reserved execution result envelopes."""
+        return self._build_dir / _RESULTS_DIR
 
     # ------------------------------------------------------------------
     # Path helpers — deterministic file names per block index
@@ -150,6 +156,18 @@ class BuildContext:
             Zero-based index of the executable block.
         """
         return self.logs_dir / f"log_{block_index:03d}.txt"
+
+    def result_path(self, block_index: int, ext: str = ".json") -> Path:
+        """Return the target path for a reserved execution result envelope.
+
+        Parameters
+        ----------
+        block_index:
+            Zero-based index of the executable block.
+        ext:
+            File extension including the leading dot (default ``".json"``).
+        """
+        return self.results_dir / f"result_{block_index:03d}{ext}"
 
     # ------------------------------------------------------------------
     # Context-manager protocol

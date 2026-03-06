@@ -158,6 +158,15 @@ class BlockExecutionResult(BaseModel):
     raw_type_name: str | None = None
 
 
+class ExecutionPayload(BaseModel):
+    block: ExecutableBlockNode
+    script_text: str
+    script_path: Path
+    result_path: Path
+    log_path: Path
+    execution_cwd: Path
+
+
 class ChartResult(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -270,6 +279,7 @@ __all__ = [
     "DiagnosticStage",
     "DocumentModel",
     "DocumentNode",
+    "ExecutionPayload",
     "ExecutableBlockNode",
     "ExecutionStatus",
     "ExecutionStreams",
