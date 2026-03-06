@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from mdcc.errors import ExecutionError, TimeoutError
+from mdcc.errors import ExecutionError, TimeoutError, ValidationError
 from mdcc.executor.payload import build_execution_payload, build_execution_payloads
 from mdcc.executor.prelude import build_runtime_prelude
 from mdcc.executor.runner import run_payload, run_payloads
@@ -141,6 +141,30 @@ def test_run_payload_captures_stdout_and_timing(tmp_path: Path) -> None:
     assert payload.log_path.read_text(encoding="utf-8").count("hello from block") == 1
 
 
+def test_run_payload_uses_fixed_runtime_aliases_without_user_imports(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path)
+    build_context = BuildContext.create(source, keep=True)
+    payload = build_execution_payload(
+        _block(
+            source_path=source,
+            index=0,
+            code=(
+                'frame = pd.DataFrame({"value": np.array([1, 2, 3])})\n'
+                'print(int(frame["value"].sum()), flush=True)\n'
+                "print(callable(alt.Chart), flush=True)\n"
+            ),
+        ),
+        build_context,
+    )
+
+    result = run_payload(payload, timeout_seconds=5.0)
+
+    assert result.status is ExecutionStatus.SUCCESS
+    assert result.streams.stdout == "6\nTrue\n"
+
+
 def test_run_payloads_executes_in_document_order(tmp_path: Path) -> None:
     source = _source_file(tmp_path)
     build_context = BuildContext.create(source, keep=True)
@@ -238,3 +262,43 @@ def test_run_payload_raises_timeout_error_with_diagnostics(tmp_path: Path) -> No
     assert diagnostic.duration_ms is not None
     assert diagnostic.duration_ms >= 0
     assert "execution exceeded 0.1 seconds" == diagnostic.exception_message
+
+
+def test_build_execution_payload_rejects_import_statements(tmp_path: Path) -> None:
+    source = _source_file(tmp_path)
+    build_context = BuildContext.create(source, keep=True)
+    block = _block(
+        source_path=source,
+        index=0,
+        code="import os\nprint(os.getcwd())\n",
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        build_execution_payload(block, build_context)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.block_id == "block-0001"
+    assert diagnostic.block_index == 0
+    assert diagnostic.source_path == source
+    assert diagnostic.location is not None
+    assert diagnostic.location.span is not None
+    assert diagnostic.location.span.start.line == 2
+    assert diagnostic.source_snippet == "import os"
+
+
+def test_build_execution_payload_rejects_dynamic_import_calls(tmp_path: Path) -> None:
+    source = _source_file(tmp_path)
+    build_context = BuildContext.create(source, keep=True)
+    block = _block(
+        source_path=source,
+        index=0,
+        code='module = __import__("os")\nprint(module.name)\n',
+    )
+
+    with pytest.raises(ValidationError) as exc_info:
+        build_execution_payload(block, build_context)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.block_id == "block-0001"
+    assert diagnostic.message == "dynamic imports are not allowed in executable blocks"
+    assert diagnostic.source_snippet == 'module = __import__("os")'

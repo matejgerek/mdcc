@@ -190,7 +190,7 @@ Can begin early, but full usefulness depends on later integration tasks.
 
 ---
 
-## T07 — Executable Block Payload Builder
+## T07 — Executable Block Payload Builder (DONE)
 Implement the stage that converts parsed executable blocks into isolated execution payloads.
 
 ### Scope
@@ -212,7 +212,7 @@ Can proceed in parallel with execution-runner work if interfaces are aligned.
 
 ---
 
-## T08 — Isolated Block Execution Runner
+## T08 — Isolated Block Execution Runner (DONE)
 Implement isolated per-block execution in document order.
 
 ### Scope
@@ -235,7 +235,7 @@ Core task. Can proceed in parallel with rendering and parsing tasks after interf
 
 ---
 
-## T09 — Runtime Rule Enforcement
+## T09 — Runtime Rule Enforcement (DONE)
 Implement runtime-level checks required by the MVP execution model.
 
 ### Scope
