@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -93,3 +94,21 @@ def test_read_source_document_raises_read_error_for_missing_file(
     diagnostic = exc_info.value.diagnostic
     assert diagnostic.stage is DiagnosticStage.READ
     assert diagnostic.category is DiagnosticCategory.READ_ERROR
+
+
+def test_frontmatter_type_mismatch() -> None:
+    # 'title' expects string, providing a list should trigger a validation error.
+    # 'date' expects a date or string, providing an object should fail.
+    frontmatter_yaml = textwrap.dedent(
+        """
+        title: ["not", "a", "string"]
+        """
+    )
+    with pytest.raises(ValidationError) as exc_info:
+        parse_frontmatter(frontmatter_yaml, "report.md")
+
+    diagnostic = exc_info.value.diagnostic
+    # Verify we surface a validation error gracefully.
+    assert diagnostic.message == "frontmatter failed validation"
+    assert "Input should be a valid string" in str(diagnostic.exception_message)
+

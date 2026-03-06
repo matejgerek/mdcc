@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -140,3 +141,62 @@ def test_parse_document_skips_empty_markdown_between_consecutive_blocks() -> Non
 
     assert len(document.nodes) == 2
     assert all(isinstance(node, ExecutableBlockNode) for node in document.nodes)
+
+
+def test_parser_tilde_fences() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text=textwrap.dedent(
+            """
+            ~~~mdcc_chart
+            chart_code()
+            ~~~
+            """
+        ).lstrip(),
+    )
+    document = parse_document(source)
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].block_type is BlockType.CHART
+
+
+def test_parser_indented_fences() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text="   ```mdcc_table\n   table_code()\n   ```\n",
+    )
+    document = parse_document(source)
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].block_type is BlockType.TABLE
+    # The code inside will contain the leading spaces because the parser
+    # currently doesn't strip indent, but it correctly parses the block.
+
+
+def test_parser_nested_markdown_blocks() -> None:
+    # A larger fence (4 backticks) should consume the executable block inside it
+    # without executing it.
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text=textwrap.dedent(
+            """
+            ````markdown
+            This is a tutorial on how to use mdcc_chart:
+
+            ```mdcc_chart
+            do_not_execute()
+            ```
+            ````
+            """
+        ).lstrip(),
+    )
+    document = parse_document(source)
+    assert len(document.nodes) == 1
+    # Should be parsed as a pure MarkdownNode, no ExecutableBlockNode
+    assert isinstance(document.nodes[0], MarkdownNode)
+    assert document.nodes[0].kind == "markdown"
+    assert "```mdcc_chart" in document.nodes[0].text
+

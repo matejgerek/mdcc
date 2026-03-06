@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import textwrap
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,9 @@ from mdcc.models import (
     SourceLocation,
     SourcePosition,
     SourceSpan,
+    SourceDocumentInput,
 )
+from mdcc.parser import parse_document
 from mdcc.utils.workspace import BuildContext
 
 
@@ -302,3 +305,73 @@ def test_build_execution_payload_rejects_dynamic_import_calls(tmp_path: Path) ->
     assert diagnostic.block_id == "block-0001"
     assert diagnostic.message == "dynamic imports are not allowed in executable blocks"
     assert diagnostic.source_snippet == 'module = __import__("os")'
+
+
+def test_rewrite_last_expression_multiline_call(tmp_path: Path) -> None:
+    # Ensure that a final multi-line expression is fully captured
+    source = Path("report.md")
+    build_context = BuildContext.create(source, keep=True)
+    body_text = textwrap.dedent(
+        """
+        ```mdcc_chart
+        (
+            alt.Chart(pd.DataFrame({"x": [1, 2]}))
+            .mark_line()
+            .encode(x="x")
+        )
+        ```
+        """
+    ).lstrip()
+    doc_source = SourceDocumentInput(
+        source_path=source,
+        raw_text="",
+        body_text=body_text,
+    )
+    document = parse_document(doc_source)
+    block = document.nodes[0]
+    assert isinstance(block, ExecutableBlockNode)
+
+    payload = build_execution_payload(block, build_context)
+    # The script should contain the serialization epilogue for the multiline capture
+    assert "MDCC_RESULT_PATH" in payload.script_text
+    # And it captures the full multiline expression
+    assert 'alt.Chart(pd.DataFrame({"x": [1, 2]}))' in payload.script_text
+
+
+def test_diagnostic_precision_for_policy_violation(tmp_path: Path) -> None:
+    # If a block has an import on line 3, the diagnostic should point exactly to it.
+    source = Path("report.md")
+    build_context = BuildContext.create(source, keep=True)
+    body_text = textwrap.dedent(
+        """
+        # Intro
+        
+        ```mdcc_chart
+        x = 1
+        y = 2
+        import sys
+        z = x + y
+        ```
+        """
+    ).lstrip()
+    doc_source = SourceDocumentInput(
+        source_path=source,
+        raw_text="",
+        body_text=body_text,
+    )
+    document = parse_document(doc_source)
+    block = document.nodes[1]
+    assert isinstance(block, ExecutableBlockNode)
+
+    with pytest.raises(ValidationError) as exc_info:
+        build_execution_payload(block, build_context)
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.location is not None
+    assert diagnostic.location.span is not None
+    assert diagnostic.source_snippet is not None
+    # Block starts on line 3, ```` is line 3, x=1 is line 4, y=2 is line 5, import sys is line 6
+    # Let's verify the exact line number calculated by AST logic.
+    assert diagnostic.location.span.start.line == 6
+    assert "import sys" in diagnostic.source_snippet
+
