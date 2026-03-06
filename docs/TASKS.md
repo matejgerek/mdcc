@@ -464,7 +464,7 @@ Can be developed in parallel once diagnostics structures exist.
 
 ---
 
-## T20 — End-to-End Compiler Orchestrator
+## T20 — End-to-End Compiler Orchestrator (DONE)
 Implement the top-level compiler flow that connects all stages.
 
 ### Scope
@@ -597,7 +597,7 @@ Can run in parallel with other testing tracks.
 
 ---
 
-## T26 — PDF Generation and End-to-End Golden Path Tests
+## T26 — PDF Generation and End-to-End Golden Path Tests (DONE)
 Create tests for full document compilation through to PDF output.
 
 ### Scope
@@ -643,7 +643,7 @@ Can be developed progressively.
 
 ---
 
-## T28 — Documentation for Supported Source Format
+## T28 — Documentation for Supported Source Format (DONE)
 Write the initial implementation-facing documentation for the supported source format.
 
 ### Scope
@@ -667,7 +667,7 @@ Can begin once core behavior is stable.
 
 ---
 
-## T29 — Documentation for Compiler Usage and Failure Interpretation
+## T29 — Documentation for Compiler Usage and Failure Interpretation (DONE)
 Write user/developer-facing documentation for invoking the compiler and understanding failures.
 
 ### Scope
