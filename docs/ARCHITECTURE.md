@@ -43,7 +43,7 @@ mdcc/
     └── mdcc/
         ├── __init__.py        # Package root and version
         ├── cli.py             # CLI entrypoints (Typer) [T06]
-        ├── main.py            # End-to-End Compiler Orchestrator [T20]
+        ├── compile.py          # End-to-End Compiler Orchestrator [T20]
         ├── models.py          # Core domain data models (Pydantic v2) [T02]
         ├── errors.py          # Diagnostics model and typed exceptions [T18, T19]
         ├── reader.py          # Source reader & frontmatter extraction [T03]
@@ -83,4 +83,4 @@ mdcc/
 
 1. **No Shared State**: Execution blocks in `executor/runner.py` explicitly cannot share globals or variables. They spawn fresh interpreters entirely.
 2. **Data-Oriented Passing**: `models.py` acts as the definitive contract between stages. The `Parser` returns model instances, the `Executor` reads model instances and returns result models, and the `Renderer` consumes result models.
-3. **No Stateful Pipelines**: The orchestrator in `main.py` simply coordinates the passing of `Pydantic` instances from one stateless module to the next, preventing tight coupling across compilation steps.
+3. **No Stateful Pipelines**: The orchestrator in `compile.py` simply coordinates the passing of `Pydantic` instances from one stateless module to the next, preventing tight coupling across compilation steps.
