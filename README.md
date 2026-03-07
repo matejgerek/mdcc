@@ -190,5 +190,4 @@ Failure categories: `READ_ERROR`, `PARSE_ERROR`, `VALIDATION_ERROR`, `EXECUTION_
 - [`docs/SOURCE_FORMAT.md`](docs/SOURCE_FORMAT.md) — full source format reference
 - [`docs/COMPILER_USAGE.md`](docs/COMPILER_USAGE.md) — compiler stages, options, and failure interpretation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internal architecture and module structure
-- [`docs/features/MVP_SPEC.md`](docs/features/MVP_SPEC.md) — technical specification
 - [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md) — detailed error category reference
