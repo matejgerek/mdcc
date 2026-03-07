@@ -814,3 +814,44 @@ Recommended diagnostic categories:
 - `bundle_validation_error` — internal contract violation within a readable bundle
 - `inspection_error` — object requested by the user does not exist or cannot be displayed
 - `sql_error` — invalid SQL or SQL execution failure
+
+---
+
+# 10. Implementation Roadmap
+
+This section defines the discrete implementation tasks for completing the bundle artifact features.
+
+## 10.1 Phase 1b — Projects & Rendering
+
+### BT-01: Inspect Commands
+Implement the `mdcc inspect` command group.
+- **Scope**: `mdcc inspect <bundle>` (overview), `--source` prints canonical source, `--annotated` prints source with read-time dataset overlays.
+- **Notes**: Derived projection only; no source mutation.
+
+### BT-02: Render from Bundle
+Implement `mdcc render <bundle> -o <file.pdf>`.
+- **Scope**: Extend schema with `block_outputs` and `output_payloads`. Store Vega-Lite/Parquet semantic outputs during creation. Render by feeding these outputs into existing renderers.
+- **Notes**: Feature-detect `block_outputs` table presence in the bundle.
+
+## 10.2 Phase 2 — Navigation
+
+### BT-03: Block and Outline Navigation
+Implement `mdcc block` group and `mdcc outline`.
+- **Scope**: Table-of-contents view with blocks interspersed. Block listing, detail view, and source-level slicing.
+- **Notes**: No schema changes; pure navigation and formatting work.
+
+### BT-04: Annotated View Enrichment
+Enrich the BT-01 annotated view with deeper relationship metadata.
+- **Scope**: Show columns, fingerprints, and row counts inline for all linked datasets.
+
+## 10.3 Phase 3 — Provenance & Persistence
+
+### BT-05: Provenance Layer
+Persist execution stats and lineage in the bundle.
+- **Scope**: New tables `block_provenance` and `execution_stats`. Capture file dependency hashes and execution timing.
+- **Notes**: Additive tables; detected at runtime.
+
+### BT-06: Intermediate Dataset Persistence
+Allow explicit opt-in for persisting mid-block DataFrames.
+- **Scope**: `--persist-intermediates` flag. Update prelude to serialize mid-run captures. Add `intermediate` and `derived` roles.
+- **Notes**: No new tables; additive enum roles in existing tables.
