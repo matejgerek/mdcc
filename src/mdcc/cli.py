@@ -14,6 +14,7 @@ from mdcc import __version__
 from mdcc.bundle.commands import (
     BundleCreateOptions,
     bundle_info,
+    render_bundle_to_path,
     bundle_validate,
     create_bundle,
     dataset_head_table,
@@ -215,6 +216,25 @@ def validate(input_file: InputFileArgument) -> None:
 
     typer.echo(report, err=True)
     raise typer.Exit(code=1)
+
+
+@app.command()
+def render(
+    bundle_file: BundleFileArgument,
+    output_file: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Path to the output PDF file."),
+    ],
+) -> None:
+    """Render a bundle into a PDF report."""
+    try:
+        render_bundle_to_path(bundle_file, output_file)
+    except MdccError as exc:
+        _report_mdcc_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        _report_unexpected_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
 
 
 @bundle_app.command("create")

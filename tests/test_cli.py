@@ -14,7 +14,7 @@ from mdcc.bundle.commands import (
     create_bundle as real_create_bundle,
 )
 from mdcc.cli import app
-from mdcc.errors import ErrorContext, InspectionError, MdccError, ReadError
+from mdcc.errors import BundleError, ErrorContext, InspectionError, MdccError, ReadError
 from mdcc.compile import CompileOptions
 from mdcc.models import (
     BlockType,
@@ -524,6 +524,97 @@ def test_bundle_create_generates_default_output_path(
     assert result.exit_code == 0
     assert len(captured_options) == 1
     assert captured_options[0].output_path == tmp_source_file.with_suffix(".mdcx")
+
+
+def test_render_command_requires_output_option(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+
+    result = cli_runner.invoke(app, ["render", str(bundle_file)])
+
+    assert result.exit_code != 0
+
+
+def test_render_command_forwards_bundle_and_output_paths(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    output_file = tmp_path / "report.pdf"
+    captured_calls: list[tuple[Path, Path]] = []
+
+    def _capture(bundle_path: Path, output_path: Path) -> None:
+        captured_calls.append((bundle_path, output_path))
+
+    with patch("mdcc.cli.render_bundle_to_path", side_effect=_capture):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_file), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 0
+    assert captured_calls == [(bundle_file, output_file)]
+
+
+def test_render_command_surfaces_mdcc_error(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    output_file = tmp_path / "report.pdf"
+    error = BundleError.from_message(
+        "bundle does not include persisted render outputs",
+        context=ErrorContext(source_path=bundle_file),
+    )
+
+    with patch("mdcc.cli.render_bundle_to_path", side_effect=error):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_file), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 1
+    assert "bundle does not include persisted render outputs" in result.output
+    assert "stage: bundle" in result.output
+    assert f"file: {bundle_file}" in result.output
+
+
+def test_render_command_renders_pdf_from_bundle(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+    output_file = tmp_path / "report.pdf"
+
+    def _capture_pdf(document, path):
+        path.write_bytes(b"%PDF-1.4")
+        return path
+
+    with patch("mdcc.bundle.render.generate_pdf", side_effect=_capture_pdf):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_path), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 0
+    assert output_file.exists()
+    assert output_file.stat().st_size > 0
 
 
 def test_dataset_commands_round_trip_bundle(

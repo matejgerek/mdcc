@@ -7,6 +7,7 @@ from pydantic import ValidationError as PydanticValidationError
 
 from mdcc.errors import BundleError
 from mdcc.models import (
+    BundleBlockOutputRecord,
     BundleBlockDatasetLink,
     BundleBlockRecord,
     BundleDatasetColumn,
@@ -14,6 +15,7 @@ from mdcc.models import (
     BundleDocumentRecord,
     BundleMetaRecord,
     BundleModel,
+    BundleOutputPayloadRecord,
     BundlePayloadRecord,
 )
 
@@ -49,6 +51,7 @@ def read_bundle(path: Path) -> BundleModel:
     connection = _open_bundle(path)
     connection.row_factory = sqlite3.Row
     try:
+        tables = _list_tables_from_connection(connection)
         meta_row = _fetch_one(connection, "SELECT * FROM bundle_meta")
         document_row = _fetch_one(connection, "SELECT * FROM documents")
         block_rows = connection.execute(
@@ -83,6 +86,26 @@ def read_bundle(path: Path) -> BundleModel:
         payload_rows = connection.execute(
             "SELECT payload_id, blob_data FROM dataset_payloads ORDER BY payload_id"
         ).fetchall()
+        if "block_outputs" in tables:
+            block_output_rows = connection.execute(
+                """
+                SELECT block_id, output_kind, format, payload_id
+                FROM block_outputs
+                ORDER BY block_id, output_kind, payload_id
+                """
+            ).fetchall()
+        else:
+            block_output_rows = []
+        if "output_payloads" in tables:
+            output_payload_rows = connection.execute(
+                """
+                SELECT payload_id, blob_data
+                FROM output_payloads
+                ORDER BY payload_id
+                """
+            ).fetchall()
+        else:
+            output_payload_rows = []
     except sqlite3.DatabaseError as exc:
         raise BundleError.from_exception(
             "invalid bundle: file is not a readable SQLite database",
@@ -125,6 +148,17 @@ def read_bundle(path: Path) -> BundleModel:
                 )
                 for row in payload_rows
             ],
+            block_outputs=[
+                BundleBlockOutputRecord.model_validate(dict(row))
+                for row in block_output_rows
+            ],
+            output_payloads=[
+                BundleOutputPayloadRecord(
+                    payload_id=row["payload_id"],
+                    blob_data=row["blob_data"],
+                )
+                for row in output_payload_rows
+            ],
         )
     except PydanticValidationError as exc:
         raise BundleError.from_exception(
@@ -136,10 +170,7 @@ def read_bundle(path: Path) -> BundleModel:
 def list_tables(path: Path) -> set[str]:
     connection = _open_bundle(path)
     try:
-        rows = connection.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
-        return {str(row[0]) for row in rows}
+        return _list_tables_from_connection(connection)
     except sqlite3.DatabaseError as exc:
         raise BundleError.from_exception(
             "invalid bundle: file is not a readable SQLite database",
@@ -206,6 +237,16 @@ def _create_schema(connection: sqlite3.Connection) -> None:
             role TEXT NOT NULL
         );
         CREATE TABLE dataset_payloads (
+            payload_id TEXT PRIMARY KEY,
+            blob_data BLOB NOT NULL
+        );
+        CREATE TABLE block_outputs (
+            block_id TEXT NOT NULL,
+            output_kind TEXT NOT NULL,
+            format TEXT NOT NULL,
+            payload_id TEXT NOT NULL
+        );
+        CREATE TABLE output_payloads (
             payload_id TEXT PRIMARY KEY,
             blob_data BLOB NOT NULL
         );
@@ -312,6 +353,27 @@ def _insert_bundle(connection: sqlite3.Connection, bundle: BundleModel) -> None:
             for link in bundle.block_datasets
         ],
     )
+    connection.executemany(
+        """
+        INSERT INTO output_payloads (payload_id, blob_data) VALUES (?, ?)
+        """,
+        [(payload.payload_id, payload.blob_data) for payload in bundle.output_payloads],
+    )
+    connection.executemany(
+        """
+        INSERT INTO block_outputs (block_id, output_kind, format, payload_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        [
+            (
+                output.block_id,
+                output.output_kind.value,
+                output.format.value,
+                output.payload_id,
+            )
+            for output in bundle.block_outputs
+        ],
+    )
 
 
 def _fetch_one(connection: sqlite3.Connection, query: str) -> sqlite3.Row:
@@ -319,3 +381,10 @@ def _fetch_one(connection: sqlite3.Connection, query: str) -> sqlite3.Row:
     if row is None:
         raise BundleError.from_message("invalid bundle: missing required bundle row")
     return row
+
+
+def _list_tables_from_connection(connection: sqlite3.Connection) -> set[str]:
+    rows = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+    ).fetchall()
+    return {str(row[0]) for row in rows}

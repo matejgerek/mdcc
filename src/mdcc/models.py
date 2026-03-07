@@ -81,6 +81,16 @@ class DatasetSourceKind(StrEnum):
     MANUAL_PERSIST = "manual_persist"
 
 
+class BundleOutputKind(StrEnum):
+    CHART_SPEC = "chart_spec"
+    TABLE_FRAME = "table_frame"
+
+
+class BundleOutputFormat(StrEnum):
+    VEGA_JSON = "vega_json"
+    PARQUET = "parquet"
+
+
 class SourcePosition(BaseModel):
     line: int = Field(ge=1)
     column: int = Field(ge=1, default=1)
@@ -367,6 +377,18 @@ class BundlePayloadRecord(BaseModel):
     blob_data: bytes
 
 
+class BundleBlockOutputRecord(BaseModel):
+    block_id: str
+    output_kind: BundleOutputKind
+    format: BundleOutputFormat
+    payload_id: str
+
+
+class BundleOutputPayloadRecord(BaseModel):
+    payload_id: str
+    blob_data: bytes
+
+
 class BundleModel(BaseModel):
     meta: BundleMetaRecord
     document: BundleDocumentRecord
@@ -374,6 +396,8 @@ class BundleModel(BaseModel):
     datasets: list[BundleDatasetRecord] = Field(default_factory=list)
     block_datasets: list[BundleBlockDatasetLink] = Field(default_factory=list)
     dataset_payloads: list[BundlePayloadRecord] = Field(default_factory=list)
+    block_outputs: list[BundleBlockOutputRecord] = Field(default_factory=list)
+    output_payloads: list[BundleOutputPayloadRecord] = Field(default_factory=list)
 
 
 class CompiledBlockRecord(BaseModel):
@@ -392,6 +416,7 @@ __all__ = [
     "BaseNode",
     "BlockMetadata",
     "BlockExecutionResult",
+    "BundleBlockOutputRecord",
     "BundleBlockDatasetLink",
     "BundleBlockRecord",
     "BundleDatasetColumn",
@@ -400,6 +425,9 @@ __all__ = [
     "BundleDocumentRecord",
     "BundleMetaRecord",
     "BundleModel",
+    "BundleOutputFormat",
+    "BundleOutputKind",
+    "BundleOutputPayloadRecord",
     "BundlePayloadRecord",
     "BlockType",
     "ChartResult",

@@ -6,7 +6,11 @@ from pathlib import Path
 from unittest.mock import patch
 import pytest
 
-from mdcc.bundle.commands import BundleCreateOptions, create_bundle
+from mdcc.bundle.commands import (
+    BundleCreateOptions,
+    create_bundle,
+    render_bundle_to_path,
+)
 from mdcc.bundle.inspect import (
     format_bundle_annotated,
     format_bundle_overview,
@@ -31,6 +35,16 @@ def _strip_inspect_overlays(text: str) -> str:
         for line in text.splitlines(keepends=True)
         if not line.startswith("<!-- mdcc-inspect:")
     )
+
+
+def _drop_render_tables(bundle_path: Path) -> None:
+    connection = sqlite3.connect(bundle_path)
+    try:
+        connection.execute("DROP TABLE block_outputs")
+        connection.execute("DROP TABLE output_payloads")
+        connection.commit()
+    finally:
+        connection.close()
 
 
 def test_create_bundle_persists_table_input_and_primary_dataset(tmp_path: Path) -> None:
@@ -90,6 +104,47 @@ def test_create_bundle_persists_chart_primary_dataset(tmp_path: Path) -> None:
     assert bundle.datasets[0].role_summary == "primary"
     frame = dataset_head(bundle_path, bundle.datasets[0].dataset_id, 5)
     assert list(frame["quarter"]) == ["Q1", "Q2"]
+
+
+def test_create_bundle_persists_render_outputs_for_table_and_chart(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Report
+
+        ```mdcc_table
+        pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]})
+        ```
+
+        ```mdcc_chart
+        frame = pd.DataFrame({"quarter": ["Q1", "Q2"], "revenue": [5, 7]})
+        alt.Chart(frame).mark_line().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    bundle = read_bundle(bundle_path)
+
+    assert [
+        (output.block_id, output.output_kind.value) for output in bundle.block_outputs
+    ] == [
+        ("block-0001", "table_frame"),
+        ("block-0002", "chart_spec"),
+    ]
+    assert [output.format.value for output in bundle.block_outputs] == [
+        "parquet",
+        "vega_json",
+    ]
+    assert len(bundle.output_payloads) == 2
 
 
 def test_bundle_sql_and_schema_commands_use_persisted_datasets(tmp_path: Path) -> None:
@@ -397,6 +452,161 @@ def test_bundle_create_bypasses_cache_and_reexecutes_blocks(tmp_path: Path) -> N
         )
 
     assert calls == [1]
+
+
+def test_read_bundle_handles_legacy_bundle_without_render_tables(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "legacy.mdcx",
+        )
+    )
+    _drop_render_tables(bundle_path)
+
+    bundle = validate_bundle(bundle_path)
+
+    assert bundle.block_outputs == []
+    assert bundle.output_payloads == []
+
+
+def test_render_bundle_generates_pdf_for_mixed_document(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        See @tbl:revenue and @fig:trend.
+
+        ```mdcc_table label="tbl:revenue" caption="Revenue table"
+        pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]})
+        ```
+
+        ```mdcc_chart label="fig:trend" caption="Revenue trend"
+        frame = pd.DataFrame({"quarter": ["Q1", "Q2"], "revenue": [10, 20]})
+        alt.Chart(frame).mark_line().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+    output_path = tmp_path / "report.pdf"
+    captured_html: list[str] = []
+
+    def _capture_pdf(document, path):
+        captured_html.append(document.html)
+        path.write_bytes(b"%PDF-1.4")
+        return path
+
+    with patch("mdcc.bundle.render.generate_pdf", side_effect=_capture_pdf):
+        result = render_bundle_to_path(bundle_path, output_path)
+
+    assert result == output_path
+    assert output_path.exists()
+    assert "Table 1. Revenue table" in captured_html[0]
+    assert "Figure 1. Revenue trend" in captured_html[0]
+    assert "See Table 1 and Figure 1." in captured_html[0]
+
+
+def test_render_bundle_generates_pdf_for_markdown_only_bundle(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Notes
+
+        Plain markdown only.
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "notes.mdcx",
+        )
+    )
+    output_path = tmp_path / "notes.pdf"
+
+    def _capture_pdf(document, path):
+        path.write_bytes(b"%PDF-1.4")
+        return path
+
+    with patch(
+        "mdcc.bundle.render.generate_pdf",
+        side_effect=_capture_pdf,
+    ):
+        result = render_bundle_to_path(bundle_path, output_path)
+
+    assert result == output_path
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+
+def test_render_bundle_rejects_legacy_bundle_without_render_tables(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "legacy.mdcx",
+        )
+    )
+    _drop_render_tables(bundle_path)
+
+    with pytest.raises(BundleError) as exc_info:
+        render_bundle_to_path(bundle_path, tmp_path / "legacy.pdf")
+
+    assert "does not include persisted render outputs" in str(exc_info.value)
+
+
+def test_render_bundle_rejects_corrupt_output_payload(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    connection = sqlite3.connect(bundle_path)
+    try:
+        connection.execute(
+            "UPDATE output_payloads SET blob_data = ?", (b"not-parquet",)
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(BundleError) as exc_info:
+        render_bundle_to_path(bundle_path, tmp_path / "report.pdf")
+
+    assert "is not readable parquet" in str(exc_info.value)
 
 
 def test_validate_bundle_rejects_missing_required_table(tmp_path: Path) -> None:

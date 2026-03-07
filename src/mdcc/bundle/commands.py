@@ -11,6 +11,7 @@ from mdcc.bundle.inspect import (
     format_bundle_overview,
     format_bundle_source,
 )
+from mdcc.bundle.render import render_bundle
 from mdcc.bundle.sql import (
     dataset_head,
     dataset_schema,
@@ -129,6 +130,10 @@ def extract_dataset_to_path(
     bundle_path: Path, dataset_id: str, output_path: Path
 ) -> Path:
     return extract_dataset(bundle_path, dataset_id, output_path)
+
+
+def render_bundle_to_path(bundle_path: Path, output_path: Path) -> Path:
+    return render_bundle(bundle_path, output_path)
 
 
 def format_dataframe(frame: pd.DataFrame) -> str:

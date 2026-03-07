@@ -5,6 +5,7 @@ import hashlib
 
 from mdcc import __version__
 from mdcc.bundle.datasets import build_bundle_datasets
+from mdcc.bundle.outputs import build_bundle_outputs
 from mdcc.models import (
     BundleBlockRecord,
     BundleDocumentRecord,
@@ -25,6 +26,7 @@ def build_bundle_model(
     source_line_offset: int = 0,
 ) -> BundleModel:
     datasets, block_links, payloads = build_bundle_datasets(compiled_blocks)
+    block_outputs, output_payloads = build_bundle_outputs(compiled_blocks)
     return BundleModel(
         meta=BundleMetaRecord(
             format_version=BUNDLE_FORMAT_VERSION,
@@ -47,6 +49,8 @@ def build_bundle_model(
         datasets=datasets,
         block_datasets=block_links,
         dataset_payloads=payloads,
+        block_outputs=block_outputs,
+        output_payloads=output_payloads,
     )
 
 
