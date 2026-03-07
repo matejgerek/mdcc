@@ -14,7 +14,7 @@ from mdcc.bundle.commands import (
     create_bundle as real_create_bundle,
 )
 from mdcc.cli import app
-from mdcc.errors import ErrorContext, MdccError, ReadError
+from mdcc.errors import ErrorContext, InspectionError, MdccError, ReadError
 from mdcc.compile import CompileOptions
 from mdcc.models import (
     BlockType,
@@ -596,3 +596,78 @@ def test_bundle_create_surfaces_read_error(
     assert "failed to read source file" in result.output
     assert "stage: read" in result.output
     assert f"file: {tmp_source_file}" in result.output
+
+
+def test_inspect_command_round_trips_bundle_views(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        frame = pd.read_csv("data.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    overview_result = cli_runner.invoke(app, ["inspect", str(bundle_path)])
+    assert overview_result.exit_code == 0
+    assert "block details:" in overview_result.output
+    assert "dataset details:" in overview_result.output
+
+    source_result = cli_runner.invoke(app, ["inspect", str(bundle_path), "--source"])
+    assert source_result.exit_code == 0
+    assert source_result.output == source.read_text(encoding="utf-8")
+
+    annotated_result = cli_runner.invoke(
+        app, ["inspect", str(bundle_path), "--annotated"]
+    )
+    assert annotated_result.exit_code == 0
+    assert (
+        "<!-- mdcc-inspect:block id=block-0001 type=mdcc_table -->"
+        in annotated_result.output
+    )
+
+
+def test_inspect_command_rejects_conflicting_projection_flags(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("not-a-bundle", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app, ["inspect", str(bundle_file), "--source", "--annotated"]
+    )
+
+    assert result.exit_code != 0
+    assert "--source and --annotated cannot be used together" in result.output
+
+
+def test_inspect_command_surfaces_mdcc_error(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    error = InspectionError.from_message(
+        "cannot project annotated source",
+        context=ErrorContext(source_path=bundle_file),
+    )
+
+    with patch("mdcc.cli.inspect_bundle_annotated", side_effect=error):
+        result = cli_runner.invoke(app, ["inspect", str(bundle_file), "--annotated"])
+
+    assert result.exit_code == 1
+    assert "cannot project annotated source" in result.output
+    assert "stage: inspection" in result.output
+    assert f"file: {bundle_file}" in result.output

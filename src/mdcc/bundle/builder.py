@@ -22,6 +22,7 @@ def build_bundle_model(
     document: DocumentModel,
     source_text: str,
     compiled_blocks: list[CompiledBlockRecord],
+    source_line_offset: int = 0,
 ) -> BundleModel:
     datasets, block_links, payloads = build_bundle_datasets(compiled_blocks)
     return BundleModel(
@@ -39,14 +40,19 @@ def build_bundle_model(
             else None,
             source_text=source_text,
         ),
-        blocks=[_block_record(record) for record in compiled_blocks],
+        blocks=[
+            _block_record(record, source_line_offset=source_line_offset)
+            for record in compiled_blocks
+        ],
         datasets=datasets,
         block_datasets=block_links,
         dataset_payloads=payloads,
     )
 
 
-def _block_record(record: CompiledBlockRecord) -> BundleBlockRecord:
+def _block_record(
+    record: CompiledBlockRecord, *, source_line_offset: int
+) -> BundleBlockRecord:
     location = record.payload.block.location
     span = location.span if location is not None else None
     start_line = span.start.line if span is not None else 1
@@ -55,8 +61,8 @@ def _block_record(record: CompiledBlockRecord) -> BundleBlockRecord:
     return BundleBlockRecord(
         block_id=record.payload.block.node_id,
         block_type=record.payload.block.block_type,
-        source_start_line=start_line,
-        source_end_line=end_line,
+        source_start_line=start_line + source_line_offset,
+        source_end_line=end_line + source_line_offset,
         label=metadata.label,
         caption=metadata.caption,
     )

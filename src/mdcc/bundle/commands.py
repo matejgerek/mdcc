@@ -6,6 +6,11 @@ import pandas as pd
 from pydantic import BaseModel, Field
 
 from mdcc.bundle.builder import build_bundle_model
+from mdcc.bundle.inspect import (
+    format_bundle_annotated,
+    format_bundle_overview,
+    format_bundle_source,
+)
 from mdcc.bundle.sql import (
     dataset_head,
     dataset_schema,
@@ -36,6 +41,9 @@ class BundleCreateOptions(BaseModel):
 def create_bundle(options: BundleCreateOptions) -> Path:
     source_input = read_source_document(options.input_path)
     source_text = source_input.raw_text
+    source_line_offset = len(source_text.splitlines()) - len(
+        source_input.body_text.splitlines()
+    )
     document = parse_document(source_input)
     assert_valid_document_structure(document)
     with BuildContext.create(
@@ -53,6 +61,7 @@ def create_bundle(options: BundleCreateOptions) -> Path:
             document=document,
             source_text=source_text,
             compiled_blocks=compiled_blocks,
+            source_line_offset=source_line_offset,
         )
         return write_bundle(options.output_path, bundle)
 
@@ -76,6 +85,18 @@ def bundle_info(bundle_path: Path) -> str:
 def bundle_validate(bundle_path: Path) -> str:
     validate_bundle(bundle_path)
     return f"bundle valid: {bundle_path}"
+
+
+def inspect_bundle_overview(bundle_path: Path) -> str:
+    return format_bundle_overview(bundle_path)
+
+
+def inspect_bundle_source(bundle_path: Path) -> str:
+    return format_bundle_source(bundle_path)
+
+
+def inspect_bundle_annotated(bundle_path: Path) -> str:
+    return format_bundle_annotated(bundle_path)
 
 
 def dataset_show(bundle_path: Path, dataset_id: str) -> str:

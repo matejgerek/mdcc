@@ -22,6 +22,9 @@ from mdcc.bundle.commands import (
     dataset_show,
     extract_dataset_to_path,
     extract_source_to_path,
+    inspect_bundle_annotated,
+    inspect_bundle_overview,
+    inspect_bundle_source,
     sql_query_table,
 )
 from mdcc.errors import MdccError, format_diagnostic, format_unexpected_error
@@ -276,6 +279,42 @@ def bundle_info_command(bundle_file: BundleFileArgument) -> None:
 def bundle_validate_command(bundle_file: BundleFileArgument) -> None:
     try:
         typer.echo(bundle_validate(bundle_file))
+    except MdccError as exc:
+        _report_mdcc_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        _report_unexpected_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
+
+
+@app.command("inspect")
+def inspect_command(
+    bundle_file: BundleFileArgument,
+    source: Annotated[
+        bool,
+        typer.Option(
+            "--source", help="Print the canonical source stored in the bundle."
+        ),
+    ] = False,
+    annotated: Annotated[
+        bool,
+        typer.Option(
+            "--annotated",
+            help="Print a derived annotated source view with dataset overlays.",
+        ),
+    ] = False,
+) -> None:
+    if source and annotated:
+        raise typer.BadParameter("--source and --annotated cannot be used together.")
+
+    try:
+        if source:
+            typer.echo(inspect_bundle_source(bundle_file), nl=False)
+            return
+        if annotated:
+            typer.echo(inspect_bundle_annotated(bundle_file), nl=False)
+            return
+        typer.echo(inspect_bundle_overview(bundle_file))
     except MdccError as exc:
         _report_mdcc_error(exc, verbose=False)
         raise typer.Exit(code=1) from exc

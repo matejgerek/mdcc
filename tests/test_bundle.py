@@ -7,6 +7,11 @@ from unittest.mock import patch
 import pytest
 
 from mdcc.bundle.commands import BundleCreateOptions, create_bundle
+from mdcc.bundle.inspect import (
+    format_bundle_annotated,
+    format_bundle_overview,
+    format_bundle_source,
+)
 from mdcc.bundle.sql import dataset_head, dataset_schema, list_datasets, run_sql
 from mdcc.bundle.store import read_bundle
 from mdcc.bundle.validate import validate_bundle
@@ -18,6 +23,14 @@ def _write_source(tmp_path: Path, body: str) -> Path:
     source = tmp_path / "report.md"
     source.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
     return source
+
+
+def _strip_inspect_overlays(text: str) -> str:
+    return "".join(
+        line
+        for line in text.splitlines(keepends=True)
+        if not line.startswith("<!-- mdcc-inspect:")
+    )
 
 
 def test_create_bundle_persists_table_input_and_primary_dataset(tmp_path: Path) -> None:
@@ -133,6 +146,220 @@ def test_bundle_extract_source_round_trips_exact_text(tmp_path: Path) -> None:
 
     bundle = read_bundle(bundle_path)
     assert bundle.document.source_text == source.read_text(encoding="utf-8")
+
+
+def test_bundle_inspect_source_returns_exact_stored_text(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Title
+
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    assert format_bundle_source(bundle_path) == source.read_text(encoding="utf-8")
+
+
+def test_bundle_block_source_lines_include_frontmatter_offset(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: Frontmatter Example
+        author: mdcc
+        ---
+
+        # Title
+
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "frontmatter.mdcx",
+        )
+    )
+
+    bundle = read_bundle(bundle_path)
+
+    assert bundle.blocks[0].source_start_line == 8
+    assert bundle.blocks[0].source_end_line == 10
+
+
+def test_bundle_inspect_overview_includes_block_dataset_and_relationship_sections(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "sales.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table label="tbl:revenue" caption="Revenue by region"
+        frame = pd.read_csv("sales.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    output = format_bundle_overview(bundle_path)
+
+    assert "block details:" in output
+    assert "dataset details:" in output
+    assert "relationships:" in output
+    assert "block-0001 | mdcc_table" in output
+    assert "label=tbl:revenue" in output
+    assert "caption=Revenue by region" in output
+    assert "dset_001 | ds_block_0001_primary | roles=input,primary" in output
+    assert "block-0001 -> input:dset_001" in output
+    assert "primary:dset_001" in output
+
+
+def test_bundle_inspect_annotated_inserts_overlay_before_block_fence(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "sales.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        frame = pd.read_csv("sales.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    output = format_bundle_annotated(bundle_path)
+
+    assert "<!-- mdcc-inspect:block id=block-0001 type=mdcc_table -->" in output
+    assert (
+        "<!-- mdcc-inspect:dataset role=input dataset_id=dset_001 "
+        "name=ds_block_0001_primary source_kind=read_csv -->"
+    ) in output
+    assert (
+        "<!-- mdcc-inspect:dataset role=primary dataset_id=dset_001 "
+        "name=ds_block_0001_primary source_kind=read_csv -->"
+    ) in output
+    assert output.index(
+        "<!-- mdcc-inspect:block id=block-0001 type=mdcc_table -->"
+    ) < output.index("```mdcc_table")
+
+
+def test_bundle_inspect_annotated_preserves_original_source_lines(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "sales.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        frame = pd.read_csv("sales.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    annotated = format_bundle_annotated(bundle_path)
+
+    assert _strip_inspect_overlays(annotated) == source.read_text(encoding="utf-8")
+
+
+def test_bundle_inspect_annotated_places_overlay_at_block_fence_with_frontmatter(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: Frontmatter Example
+        author: mdcc
+        ---
+
+        # Title
+
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "frontmatter.mdcx",
+        )
+    )
+
+    lines = format_bundle_annotated(bundle_path).splitlines()
+    overlay_index = lines.index(
+        "<!-- mdcc-inspect:block id=block-0001 type=mdcc_table -->"
+    )
+    fence_index = lines.index("```mdcc_table")
+
+    assert overlay_index + 2 == fence_index
+
+
+def test_bundle_inspect_handles_bundle_without_blocks_or_datasets(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Notes
+
+        Plain markdown only.
+        """,
+    )
+    bundle_path = create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "notes.mdcx",
+        )
+    )
+
+    overview = format_bundle_overview(bundle_path)
+    annotated = format_bundle_annotated(bundle_path)
+
+    assert "blocks: 0" in overview
+    assert "datasets: 0" in overview
+    assert overview.count("- (none)") >= 3
+    assert annotated == source.read_text(encoding="utf-8")
 
 
 def test_bundle_create_bypasses_cache_and_reexecutes_blocks(tmp_path: Path) -> None:
