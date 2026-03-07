@@ -1,5 +1,8 @@
 # CROSS_REFERENCING_SPEC.md
 
+## Status
+**DONE**
+
 ## Overview
 
 This document defines the **cross-referencing system** for mdcc documents.
