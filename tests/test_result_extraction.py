@@ -206,8 +206,12 @@ class TestResultEnvelope:
 
 class TestPreludeEpilogue:
     def test_prelude_contains_result_path_constant(self, tmp_path: Path) -> None:
-        prelude = build_runtime_prelude(tmp_path / "result_000.json")
+        prelude = build_runtime_prelude(
+            tmp_path / "result_000.json",
+            tmp_path / "dependency_000.json",
+        )
         assert "MDCC_RESULT_PATH" in prelude
+        assert "MDCC_DEPENDENCY_PATH" in prelude
         assert "import altair as alt" in prelude
         assert "import numpy as np" in prelude
         assert "import pandas as pd" in prelude

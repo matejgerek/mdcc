@@ -58,12 +58,16 @@ def _block(
 
 
 def test_build_runtime_prelude_exposes_fixed_aliases(tmp_path: Path) -> None:
-    prelude = build_runtime_prelude(tmp_path / "result_000.json")
+    prelude = build_runtime_prelude(
+        tmp_path / "result_000.json",
+        tmp_path / "dependency_000.json",
+    )
 
     assert "import altair as alt" in prelude
     assert "import numpy as np" in prelude
     assert "import pandas as pd" in prelude
     assert "MDCC_RESULT_PATH" in prelude
+    assert "MDCC_DEPENDENCY_PATH" in prelude
 
 
 def test_build_execution_payload_writes_deterministic_script_and_paths(
@@ -77,6 +81,7 @@ def test_build_execution_payload_writes_deterministic_script_and_paths(
 
     assert payload.script_path == build_context.payload_path(0)
     assert payload.result_path == build_context.result_path(0)
+    assert payload.dependency_path == build_context.dependency_path(0)
     assert payload.log_path == build_context.log_path(0)
     assert payload.execution_cwd == source.parent
     assert payload.script_path.read_text(encoding="utf-8") == payload.script_text
@@ -142,6 +147,7 @@ def test_run_payload_captures_stdout_and_timing(tmp_path: Path) -> None:
     assert result.timing.duration_ms is not None
     assert result.timing.duration_ms >= 0
     assert payload.log_path.read_text(encoding="utf-8").count("hello from block") == 1
+    assert payload.dependency_path.read_text(encoding="utf-8") == "[]"
 
 
 def test_run_payload_uses_fixed_runtime_aliases_without_user_imports(
@@ -166,6 +172,31 @@ def test_run_payload_uses_fixed_runtime_aliases_without_user_imports(
 
     assert result.status is ExecutionStatus.SUCCESS
     assert result.streams.stdout == "6\nTrue\n"
+
+
+def test_run_payload_tracks_file_reads_as_dependencies(tmp_path: Path) -> None:
+    source = _source_file(tmp_path)
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("value\n1\n2\n", encoding="utf-8")
+    build_context = BuildContext.create(source, keep=True)
+    payload = build_execution_payload(
+        _block(
+            source_path=source,
+            index=0,
+            code=(
+                f'with open("{data_path.name}", encoding="utf-8") as handle:\n'
+                "    print(handle.readline().strip(), flush=True)\n"
+            ),
+        ),
+        build_context,
+    )
+
+    result = run_payload(payload, timeout_seconds=5.0)
+
+    assert result.status is ExecutionStatus.SUCCESS
+    assert data_path.resolve().as_posix() in payload.dependency_path.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_run_payloads_executes_in_document_order(tmp_path: Path) -> None:

@@ -147,6 +147,22 @@ def test_compile_passes_keep_build_dir_flag(
     assert captured_options[0].keep_build_dir is True
 
 
+def test_compile_passes_no_cache_flag(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    """``--no-cache`` should disable the block cache."""
+    captured_options: list[CompileOptions] = []
+
+    def _capture(options: CompileOptions) -> None:
+        captured_options.append(options)
+
+    with patch("mdcc.cli.run_compile", side_effect=_capture):
+        result = cli_runner.invoke(app, ["compile", str(tmp_source_file), "--no-cache"])
+
+    assert result.exit_code == 0
+    assert captured_options[0].use_cache is False
+
+
 def test_compile_passes_verbose_flag(
     cli_runner: CliRunner, tmp_source_file: Path
 ) -> None:

@@ -110,6 +110,13 @@ def compile(
             help="Preserve the .mdcc_build/ directory after compilation.",
         ),
     ] = False,
+    no_cache: Annotated[
+        bool,
+        typer.Option(
+            "--no-cache",
+            help="Disable the block cache and force fresh execution.",
+        ),
+    ] = False,
     verbose: Annotated[
         bool,
         typer.Option(
@@ -127,6 +134,7 @@ def compile(
         output_path=resolved_output,
         timeout_seconds=timeout,
         keep_build_dir=keep_build_dir,
+        use_cache=not no_cache,
         verbose=verbose,
     )
 

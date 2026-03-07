@@ -4,6 +4,7 @@ import ast
 from pathlib import Path
 
 from mdcc.executor.prelude import (
+    build_capture_mode,
     build_no_expression_epilogue,
     build_result_epilogue,
     build_runtime_prelude,
@@ -25,9 +26,14 @@ def build_execution_payload(
     assert_valid_executable_block_runtime_policy(block)
     script_path = build_context.payload_path(block.block_index)
     result_path = build_context.result_path(block.block_index)
+    dependency_path = build_context.dependency_path(block.block_index)
     log_path = build_context.log_path(block.block_index)
     execution_cwd = build_context.build_dir.parent
-    script_text = _build_payload_script(block=block, result_path=result_path)
+    script_text = _build_payload_script(
+        block=block,
+        result_path=result_path,
+        dependency_path=dependency_path,
+    )
     script_path.write_text(script_text, encoding="utf-8")
 
     return ExecutionPayload(
@@ -35,6 +41,7 @@ def build_execution_payload(
         script_text=script_text,
         script_path=script_path,
         result_path=result_path,
+        dependency_path=dependency_path,
         log_path=log_path,
         execution_cwd=execution_cwd,
     )
@@ -57,9 +64,14 @@ def build_execution_payloads(
 # ──────────────────────────────────────────────────────────────────────
 
 
-def _build_payload_script(*, block: ExecutableBlockNode, result_path: Path) -> str:
+def _build_payload_script(
+    *,
+    block: ExecutableBlockNode,
+    result_path: Path,
+    dependency_path: Path,
+) -> str:
     """Assemble the full execution script: prelude + user code + epilogue."""
-    prelude = build_runtime_prelude(result_path)
+    prelude = build_runtime_prelude(result_path, dependency_path)
     user_code, epilogue = _rewrite_last_expression(block.code)
     return f"{prelude}\n{user_code}\n{epilogue}"
 
@@ -106,6 +118,19 @@ def _rewrite_last_expression(source: str) -> tuple[str, str]:
     return body_source, epilogue
 
 
+def capture_mode_for_source(source: str) -> str:
+    """Return the stable capture mode used for cache fingerprinting."""
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return build_capture_mode(False)
+
+    if not tree.body:
+        return build_capture_mode(False)
+
+    return build_capture_mode(isinstance(tree.body[-1], ast.Expr))
+
+
 def _extract_expression_source(full_source: str, node: ast.Expr) -> str:
     """Return the raw source text corresponding to an ``ast.Expr`` node."""
     return ast.get_source_segment(full_source, node.value) or ast.unparse(node.value)
@@ -138,4 +163,8 @@ def _source_before_node(full_source: str, node: ast.AST) -> str:
     return before
 
 
-__all__ = ["build_execution_payload", "build_execution_payloads"]
+__all__ = [
+    "build_execution_payload",
+    "build_execution_payloads",
+    "capture_mode_for_source",
+]

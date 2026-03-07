@@ -170,6 +170,7 @@ class ExecutionPayload(BaseModel):
     script_text: str
     script_path: Path
     result_path: Path
+    dependency_path: Path
     log_path: Path
     execution_cwd: Path
 

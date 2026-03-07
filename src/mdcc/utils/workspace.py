@@ -23,6 +23,7 @@ _TABLES_DIR = "tables"
 _PAYLOADS_DIR = "payloads"
 _LOGS_DIR = "logs"
 _RESULTS_DIR = "results"
+_DEPENDENCIES_DIR = "dependencies"
 
 # Default name of the build directory placed next to the source file.
 BUILD_DIR_NAME = ".mdcc_build"
@@ -70,7 +71,14 @@ class BuildContext:
         build_dir = source_path.parent / BUILD_DIR_NAME
         build_dir.mkdir(parents=True, exist_ok=True)
 
-        for sub in (_CHARTS_DIR, _TABLES_DIR, _PAYLOADS_DIR, _LOGS_DIR, _RESULTS_DIR):
+        for sub in (
+            _CHARTS_DIR,
+            _TABLES_DIR,
+            _PAYLOADS_DIR,
+            _LOGS_DIR,
+            _RESULTS_DIR,
+            _DEPENDENCIES_DIR,
+        ):
             (build_dir / sub).mkdir(exist_ok=True)
 
         return cls(build_dir, keep=keep)
@@ -108,6 +116,11 @@ class BuildContext:
     def results_dir(self) -> Path:
         """Directory for reserved execution result envelopes."""
         return self._build_dir / _RESULTS_DIR
+
+    @property
+    def dependencies_dir(self) -> Path:
+        """Directory for block execution dependency manifests."""
+        return self._build_dir / _DEPENDENCIES_DIR
 
     # ------------------------------------------------------------------
     # Path helpers — deterministic file names per block index
@@ -156,6 +169,10 @@ class BuildContext:
             Zero-based index of the executable block.
         """
         return self.logs_dir / f"log_{block_index:03d}.txt"
+
+    def dependency_path(self, block_index: int, ext: str = ".json") -> Path:
+        """Return the target path for a dependency manifest file."""
+        return self.dependencies_dir / f"dependency_{block_index:03d}{ext}"
 
     def result_path(self, block_index: int, ext: str = ".json") -> Path:
         """Return the target path for a reserved execution result envelope.

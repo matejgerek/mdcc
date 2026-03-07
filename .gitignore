@@ -50,6 +50,7 @@ coverage.xml
 
 # Project Specific
 .mdcc_build/
+.mdcc_cache/
 *.pdf
 
 # OS

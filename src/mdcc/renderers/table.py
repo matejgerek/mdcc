@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import pandas as pd
+
 from mdcc.errors import ErrorContext, RenderingError
-from mdcc.models import ArtifactKind, RenderedArtifact, TableResult
+from mdcc.models import ArtifactKind, ExecutableBlockNode, RenderedArtifact, TableResult
 from mdcc.utils.workspace import BuildContext
 
 
@@ -10,18 +12,31 @@ def render_table_artifact(
     build_context: BuildContext,
 ) -> RenderedArtifact:
     """Render a validated table result into a document-ready HTML artifact."""
-    block = result.block
+    return render_table_frame_artifact(
+        block=result.block,
+        frame=result.value,
+        build_context=build_context,
+    )
+
+
+def render_table_frame_artifact(
+    *,
+    block: ExecutableBlockNode,
+    frame: pd.DataFrame,
+    build_context: BuildContext,
+) -> RenderedArtifact:
+    """Render a cached DataFrame into a document-ready HTML artifact."""
     target_path = build_context.table_path(block.block_index, ".html")
 
     try:
-        html = result.value.to_html(index=True, escape=True)
+        html = frame.to_html(index=True, escape=True)
         target_path.write_text(html, encoding="utf-8")
     except Exception as exc:
         raise RenderingError.from_exception(
             "failed to render table artifact",
             exc,
-            context=_error_context(result),
-            source_snippet=_source_snippet(result),
+            context=_error_context(block),
+            source_snippet=_source_snippet(block),
         ) from exc
 
     return RenderedArtifact(
@@ -34,8 +49,7 @@ def render_table_artifact(
     )
 
 
-def _error_context(result: TableResult) -> ErrorContext:
-    block = result.block
+def _error_context(block: ExecutableBlockNode) -> ErrorContext:
     location = block.location
     return ErrorContext(
         source_path=location.source_path if location is not None else None,
@@ -46,9 +60,9 @@ def _error_context(result: TableResult) -> ErrorContext:
     )
 
 
-def _source_snippet(result: TableResult) -> str | None:
-    location = result.block.location
+def _source_snippet(block: ExecutableBlockNode) -> str | None:
+    location = block.location
     return location.snippet if location is not None else None
 
 
-__all__ = ["render_table_artifact"]
+__all__ = ["render_table_artifact", "render_table_frame_artifact"]

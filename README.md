@@ -14,7 +14,7 @@ Most analytical report tools carry hidden state, noisy formats, or complex publi
 - **Single-file reproducible reports** — narrative, code, charts, and tables live in one Markdown file.
 - **Deterministic execution** — each block runs in an isolated process, preventing hidden state and making results predictable.
 - **Git-friendly** — plain Markdown keeps diffs clean, unlike the noisy JSON used by notebook systems.
-- **No stored outputs or hidden state** — everything is regenerated on every compile run.
+- **Practical repeated compiles** — successful blocks are cached locally and invalidated when tracked inputs change.
 - **Focused and minimal** — `mdcc` is purpose-built for analytical reports, not a general publishing system.
 
 ### Compared to Alternatives
@@ -80,7 +80,10 @@ mdcc validate <input_file>
 |---|---|
 | `--timeout`, `-t` | Per-block execution timeout in seconds (default: 30) |
 | `--keep-build-dir` | Preserve the `.mdcc_build` intermediate directory after compilation |
+| `--no-cache` | Disable the persistent per-block cache and force fresh execution |
 | `--verbose`, `-v` | Show expanded diagnostic output on failure or success |
+
+`mdcc` keeps a persistent `.mdcc_cache/` directory next to the source document. Cache entries are scoped to the source directory and invalidated when the block definition, runtime fingerprint, or tracked local file reads change. Use `--no-cache` when you want to bypass cached block results entirely.
 
 ### Example
 
@@ -111,6 +114,8 @@ date: "2024-01-15"
 ### Executable Blocks
 
 Each block runs in its own isolated Python process. The packages `pandas` (as `pd`), `numpy` (as `np`), and `altair` (as `alt`) are available automatically. User `import` statements are not allowed.
+
+Phase 1 caching tracks common local file reads during execution, including `open(...)` and common pandas readers such as `pd.read_csv(...)`. This keeps repeated compiles fast for reports that read local data files. The cache does not guarantee correct invalidation for HTTP/network reads, environment variables, time/randomness, or other hidden ambient state.
 
 The **last expression** in the block is the output — no explicit render calls needed.
 
@@ -173,7 +178,7 @@ For the full format reference, see [`docs/SOURCE_FORMAT.md`](docs/SOURCE_FORMAT.
 
 ## Diagnostics
 
-When compilation fails, `mdcc` reports the file, block number, location, failure stage, and error message. Use `--verbose` for expanded output including `stdout`/`stderr` from the failing block and type mismatch details.
+When compilation fails, `mdcc` reports the file, block number, location, failure stage, and error message. Use `--verbose` for expanded output including `stdout`/`stderr` from the failing block, type mismatch details, and cache hit/miss information during successful compiles.
 
 Failure categories: `READ_ERROR`, `PARSE_ERROR`, `VALIDATION_ERROR`, `EXECUTION_ERROR`, `TIMEOUT_ERROR`, `RENDERING_ERROR`, `PDF_ERROR`.
 
@@ -185,5 +190,5 @@ Failure categories: `READ_ERROR`, `PARSE_ERROR`, `VALIDATION_ERROR`, `EXECUTION_
 - [`docs/SOURCE_FORMAT.md`](docs/SOURCE_FORMAT.md) — full source format reference
 - [`docs/COMPILER_USAGE.md`](docs/COMPILER_USAGE.md) — compiler stages, options, and failure interpretation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internal architecture and module structure
-- [`docs/SPEC.md`](docs/SPEC.md) — technical specification
+- [`docs/features/MVP_SPEC.md`](docs/features/MVP_SPEC.md) — technical specification
 - [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md) — detailed error category reference
