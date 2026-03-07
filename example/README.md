@@ -2,12 +2,12 @@
 
 This folder contains a complete file-backed `mdcc` example:
 
-- `example.md`: the source document
+- `example.md`: the source document for a baseline company report
+- `apple_analysis.mdcc`: an advanced report featuring real-time financial data fetching
 - `data/market-data.json`: monthly market metrics
 - `data/region-targets.csv`: region-level target data
 
-The example also demonstrates phase-1 block metadata by adding `caption="..."`
-and `label="..."` attributes to its chart and table fences.
+The examples demonstrate phase-1 block metadata support (using `caption="..."` and `label="..."` attributes) and live network-based data loading.
 
 ## How to Run
 
@@ -76,3 +76,14 @@ Preserve build artifacts for debugging:
 ```bash
 uv run mdcc compile example/example.md --keep-build-dir --verbose
 ```
+
+## Advanced Example: Apple Q1 2026 Analysis
+
+The `apple_analysis.mdcc` file provides a more complex real-world scenario. Unlike the basic example which uses local JSON/CSV files, this report:
+- Fetches real-time financial data using `pd.read_csv` from external stock market APIs.
+- Uses **Multiple Block Types** (including `mdcc_table` for financials and `mdcc_chart` for revenue and pricing trends).
+- Demonstrates **Cross-Referencing** with internal figure and table labels (e.g., `@fig:historical-price`).
+
+### High-Level Generation Prompt
+This report was generated using a single high-level prompt:
+> "Generate a comprehensive `mdcc` document for Apple's fiscal Q1 2026 performance. It should include an executive summary, a financial metrics table, a segmented revenue bar chart, and a historical stock price trend section that fetches live daily closing data from an external API."

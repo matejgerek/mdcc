@@ -1,0 +1,144 @@
+---
+title: "Apple Q1 2026 Performance Analysis"
+author: "Antigravity Research"
+date: "2026-03-07"
+---
+
+# Executive Summary
+
+Apple Inc. (AAPL) reported record-breaking financial results for its fiscal first quarter ended December 27, 2025. The quarter was characterized by unprecedented demand for the **iPhone 17 family**, which drove a significant surge in total revenue and earnings per share.
+
+Key highlights include:
+*   **Total Revenue**: $143.8 billion, a 16% year-over-year increase.
+*   **Diluted EPS**: $2.84, an all-time record, up 19% YoY.
+*   **Active Installed Base**: Surpassed 2.5 billion devices globally.
+*   **Shareholder Returns**: Nearly $32 billion returned through dividends and buybacks.
+
+The strength of the Services ecosystem continues to provide a high-margin foundation, while emerging markets like India and China showed robust growth trajectories.
+
+---
+
+# Financial Highlights
+
+The following table summarizes the core financial metrics for Q1 2026 compared to analyst estimates and historical benchmarks.
+
+```mdcc_table caption="Key Financial Metrics Q1 2026 ($ Billions unless noted)" label="tbl:financials"
+data = {
+    "Metric": ["Total Revenue", "Gross Margin (%)", "Net Income", "Diluted EPS ($)", "Operating Cash Flow"],
+    "Q1 2026 Actual": [143.8, 46.2, 38.4, 2.84, 54.0],
+    "YoY Growth": ["+16%", "+120 bps", "+18%", "+19%", "+12%"]
+}
+pd.DataFrame(data)
+```
+
+As shown in @tbl:financials, Apple exceeded performance targets across nearly all primary categories, supported by expanding gross margins and disciplined operational efficiency.
+
+---
+
+# Revenue by Segment
+
+Apple's revenue diversification continues to evolve, with the iPhone remaining the primary growth engine while Services cements its position as a critical second pillar.
+
+```mdcc_chart caption="Revenue Distribution by Product Segment (Q1 2026 vs Q1 2025)" label="fig:segment-revenue"
+# Data preparation
+segments = ["iPhone", "Services", "Mac", "iPad", "Wearables"]
+rev_2026 = [85.3, 30.0, 8.4, 8.6, 11.5]
+rev_2025 = [69.35, 26.32, 9.03, 8.11, 11.73]
+
+df = pd.DataFrame({
+    "Segment": segments * 2,
+    "Revenue": rev_2026 + rev_2025,
+    "Year": ["2026"] * 5 + ["2025"] * 5
+})
+
+# Create Chart
+chart = alt.Chart(df).mark_bar().encode(
+    x=alt.X("Year:N", title=None),
+    y=alt.Y("Revenue:Q", title="Revenue ($ Billions)"),
+    color=alt.Color("Year:N", scale=alt.Scale(range=["#0071E3", "#86868B"])),
+    column=alt.Column("Segment:N", title="Segment", header=alt.Header(labelOrient="bottom", titleOrient="bottom"))
+).properties(
+    width=100,
+    height=300
+).configure_view(
+    stroke=None
+)
+
+chart
+```
+
+As visualized in @fig:segment-revenue, the **iPhone segment** saw a massive $16 billion increase in quarterly revenue, reflecting a dominant upgrade cycle. Conversely, the Mac and Wearables segments faced slight headwinds due to difficult year-over-year comparisons and specific product constraints.
+
+---
+
+# Stock Market Performance
+
+Apple's stock price reflected the strong operational results throughout the fiscal year. The following section visualizes the daily closing price for the trailing 12 months leading up to the earnings announcement.
+
+```mdcc_chart caption="AAPL Daily Closing Price (Last 12 Months)" label="fig:historical-price"
+# Load data from stable financial endpoint (Stooq) as a mirror of Yahoo-style data
+# This is used to ensure reliable network fetch without complex browser headers
+url = "https://stooq.com/q/d/l/?s=aapl.us&f=sdxcvl&i=d"
+prices = pd.read_csv(url)
+
+# Convert Date and Filter for 2025
+prices['Date'] = pd.to_datetime(prices['Date'])
+df_2025 = prices[(prices['Date'] >= '2025-01-01') & (prices['Date'] <= '2025-12-27')]
+
+# Create Chart
+alt.Chart(df_2025).mark_line(color="#0071E3", strokeWidth=2).encode(
+    x=alt.X('Date:T', title='Date'),
+    y=alt.Y('Close:Q', title='Closing Price ($)', scale=alt.Scale(zero=False)),
+    tooltip=['Date', 'Close']
+).properties(
+    width=640,
+    height=320
+).configure_view(
+    stroke=None
+)
+```
+
+As seen in @fig:historical-price, the stock price demonstrated steady upward momentum during 2025, buoyed by anticipation of the AI-integrated product lineup.
+
+```mdcc_table caption="Recent Stock Price Performance Summary" label="tbl:stock-stats"
+url = "https://stooq.com/q/d/l/?s=aapl.us&f=sdxcvl&i=d"
+prices = pd.read_csv(url)
+prices['Date'] = pd.to_datetime(prices['Date'])
+df_2025 = prices[(prices['Date'] >= '2025-01-01') & (prices['Date'] <= '2025-12-27')]
+
+stats = {
+    "Period": ["Start 2025", "End Q1 2026 (Dec 27)", "Year High", "Year Low"],
+    "Price ($)": [
+        df_2025['Close'].iloc[0],
+        df_2025['Close'].iloc[-1],
+        df_2025['Close'].max(),
+        df_2025['Close'].min()
+    ]
+}
+pd.DataFrame(stats)
+```
+
+---
+
+# Quarterly Segment Analysis
+
+### iPhone: The Power of AI and Design
+The iPhone 17 family set all-time records for any quarter, growing 23% year-over-year. The integration of advanced AI capabilities ("Apple Intelligence 2.0") acted as a major catalyst for the "Supercycle" analysts had predicted.
+
+### Services: Consistent High-Margin Growth
+Services revenue reached an all-time record of $30 billion. Growth was broad-based across App Store, Apple Music, and iCloud, with advertising and payment services reaching new peaks.
+
+### Regional Outlook
+Geographically, Apple set revenue records in all major regions:
+*   **Americas**: Strong 14% growth driven by US consumer spending.
+*   **Greater China**: Rebounded with 11% growth after a period of volatility.
+*   **Europe & Japan**: Set all-time records supported by favorable currency dynamics.
+*   **Emerging Markets**: India and Southeast Asia continue to be high-growth priorities.
+
+---
+
+# Conclusion
+
+Apple's Q1 2026 results demonstrate the resilience of its hardware-software-services ecosystem. The record revenue and earnings, combined with an expanding installed base of 2.5 billion devices, positions the company strongly for the remainder of the fiscal year. 
+
+Future growth is expected to be sustained by continued Services momentum and the expansion of spatial computing and AI-integrated hardware across the lineup.
