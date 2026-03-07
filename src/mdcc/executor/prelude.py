@@ -32,6 +32,12 @@ MDCC_RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
 MDCC_DEPENDENCY_PATH = Path({dependency_path})
 MDCC_DEPENDENCY_PATH.parent.mkdir(parents=True, exist_ok=True)
 _MDCC_DEPENDENCIES = set()
+MDCC_DATASET_MANIFEST_PATH = Path({dataset_manifest_path})
+MDCC_DATASET_MANIFEST_PATH.parent.mkdir(parents=True, exist_ok=True)
+MDCC_DATASET_PAYLOADS_DIR = Path({dataset_payloads_dir})
+MDCC_DATASET_PAYLOADS_DIR.mkdir(parents=True, exist_ok=True)
+MDCC_CAPTURE_DATASETS = {capture_datasets}
+_MDCC_DATASET_CAPTURES = []
 
 def _mdcc_normalize_dependency(_path):
     if isinstance(_path, int):
@@ -53,6 +59,10 @@ def _mdcc_flush_dependencies():
         _mdcc_json.dumps(sorted(_MDCC_DEPENDENCIES)),
         encoding="utf-8",
     )
+    MDCC_DATASET_MANIFEST_PATH.write_text(
+        _mdcc_json.dumps(_MDCC_DATASET_CAPTURES),
+        encoding="utf-8",
+    )
 
 atexit.register(_mdcc_flush_dependencies)
 
@@ -71,6 +81,21 @@ def _mdcc_wrap_pandas_reader(_reader):
     def _wrapped(_path, *args, **kwargs):
         _result = _reader(_path, *args, **kwargs)
         _mdcc_record_dependency(_path)
+        if MDCC_CAPTURE_DATASETS and isinstance(_result, pd.DataFrame):
+            _capture_index = len(_MDCC_DATASET_CAPTURES)
+            _payload_path = (
+                MDCC_DATASET_PAYLOADS_DIR
+                / f"dataset_{{_capture_index:03d}}.parquet"
+            )
+            _result.to_parquet(_payload_path, index=False)
+            _MDCC_DATASET_CAPTURES.append(
+                {{
+                    "ordinal": _capture_index,
+                    "source_kind": _reader.__name__,
+                    "source_path": _mdcc_normalize_dependency(_path),
+                    "payload_path": str(_payload_path),
+                }}
+            )
         return _result
     return _wrapped
 
@@ -121,11 +146,21 @@ MDCC_RESULT_PATH.write_bytes(_mdcc_pickle.dumps(_mdcc_envelope))
 """
 
 
-def build_runtime_prelude(result_path: Path, dependency_path: Path) -> str:
+def build_runtime_prelude(
+    result_path: Path,
+    dependency_path: Path,
+    dataset_manifest_path: Path,
+    dataset_payloads_dir: Path,
+    *,
+    capture_datasets: bool,
+) -> str:
     """Return the deterministic runtime prelude for an execution payload."""
     return _PRELUDE_TEMPLATE.format(
         result_path=json.dumps(str(result_path)),
         dependency_path=json.dumps(str(dependency_path)),
+        dataset_manifest_path=json.dumps(str(dataset_manifest_path)),
+        dataset_payloads_dir=json.dumps(str(dataset_payloads_dir)),
+        capture_datasets=repr(capture_datasets),
     )
 
 

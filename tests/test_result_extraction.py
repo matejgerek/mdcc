@@ -209,6 +209,9 @@ class TestPreludeEpilogue:
         prelude = build_runtime_prelude(
             tmp_path / "result_000.json",
             tmp_path / "dependency_000.json",
+            tmp_path / "dataset_manifest_000.json",
+            tmp_path / "datasets",
+            capture_datasets=False,
         )
         assert "MDCC_RESULT_PATH" in prelude
         assert "MDCC_DEPENDENCY_PATH" in prelude

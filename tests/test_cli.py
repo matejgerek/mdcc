@@ -9,6 +9,10 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from mdcc import __version__
+from mdcc.bundle.commands import (
+    BundleCreateOptions,
+    create_bundle as real_create_bundle,
+)
 from mdcc.cli import app
 from mdcc.errors import MdccError
 from mdcc.compile import CompileOptions
@@ -504,3 +508,74 @@ def test_validate_surfaces_malformed_block_headers_with_existing_diagnostics(
     assert result.exit_code == 1
     assert "error: malformed executable block metadata attributes" in result.output
     assert "stage: parse" in result.output
+
+
+def test_bundle_create_generates_default_output_path(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    captured_options: list[BundleCreateOptions] = []
+
+    def _capture(options: BundleCreateOptions) -> None:
+        captured_options.append(options)
+
+    with patch("mdcc.cli.create_bundle", side_effect=_capture):
+        result = cli_runner.invoke(app, ["bundle", "create", str(tmp_source_file)])
+
+    assert result.exit_code == 0
+    assert len(captured_options) == 1
+    assert captured_options[0].output_path == tmp_source_file.with_suffix(".mdcx")
+
+
+def test_dataset_commands_round_trip_bundle(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        frame = pd.read_csv("data.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    list_result = cli_runner.invoke(app, ["dataset", "list", str(bundle_path)])
+    assert list_result.exit_code == 0
+    assert "ds_block_0001_primary" in list_result.output
+
+    show_result = cli_runner.invoke(
+        app,
+        ["dataset", "show", str(bundle_path), "--id", "dset_001"],
+    )
+    assert show_result.exit_code == 0
+    assert "role_summary: input,primary" in show_result.output
+
+    head_result = cli_runner.invoke(
+        app,
+        ["dataset", "head", str(bundle_path), "--id", "dset_001", "--rows", "1"],
+    )
+    assert head_result.exit_code == 0
+    assert "na" in head_result.output
+
+
+def test_sql_command_rejects_file_option(cli_runner: CliRunner, tmp_path: Path) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("not-a-bundle", encoding="utf-8")
+    query_file = tmp_path / "query.sql"
+    query_file.write_text("select 1", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app,
+        ["sql", str(bundle_file), "select 1", "--file", str(query_file)],
+    )
+
+    assert result.exit_code == 1
+    assert "SQL file input is not supported" in result.output

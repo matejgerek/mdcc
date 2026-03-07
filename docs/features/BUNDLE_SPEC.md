@@ -299,6 +299,18 @@ Recommended approach:
 - wrap supported pandas readers to record dataset captures in addition to file dependencies
 - let host-side bundle code decide which captures become persisted bundle datasets
 
+Phase 1a decision:
+
+- dataset capture is enabled for `mdcc bundle create`, not for `mdcc compile`
+- normal source compilation continues to track file dependencies from wrapped pandas readers, but it does not persist reader outputs to Parquet
+- `mdcc bundle create` bypasses the block cache in phase 1a so bundle creation always materializes the dataset captures it needs directly from execution
+
+Rationale:
+
+- persisting reader outputs during ordinary `compile` introduced overhead and a failure mode unrelated to PDF generation: some valid pandas dataframes can be rendered normally but cannot be serialized to Parquet
+- reusing compile cache entries for bundle creation is ambiguous when those cache entries were created without dataset capture enabled
+- bypassing cache for bundle creation keeps phase 1a semantics simple while preserving the existing compile cache behavior
+
 The prelude should not assign final bundle IDs or write SQLite directly. It should emit normalized capture facts such as:
 
 - source kind (`read_csv`, `read_parquet`, etc.)
@@ -410,6 +422,8 @@ Delivers:
 - canonical source stored exactly as authored
 - bundle metadata and document manifest
 - persisted datasets for wrapped input reads and primary rendered datasets
+- dataset capture performed during `mdcc bundle create` execution only
+- bundle creation bypasses block cache in phase 1a
 - dataset schema, row count, and storage metadata
 - mapping between blocks and datasets
 - `mdcc bundle create`

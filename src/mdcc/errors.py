@@ -170,6 +170,46 @@ class PdfGenerationError(MdccError):
         return DiagnosticCategory.PDF_ERROR
 
 
+class BundleError(MdccError):
+    @classmethod
+    def diagnostic_stage(cls) -> DiagnosticStage:
+        return DiagnosticStage.BUNDLE
+
+    @classmethod
+    def diagnostic_category(cls) -> DiagnosticCategory:
+        return DiagnosticCategory.BUNDLE_ERROR
+
+
+class BundleValidationError(MdccError):
+    @classmethod
+    def diagnostic_stage(cls) -> DiagnosticStage:
+        return DiagnosticStage.BUNDLE
+
+    @classmethod
+    def diagnostic_category(cls) -> DiagnosticCategory:
+        return DiagnosticCategory.BUNDLE_VALIDATION_ERROR
+
+
+class InspectionError(MdccError):
+    @classmethod
+    def diagnostic_stage(cls) -> DiagnosticStage:
+        return DiagnosticStage.INSPECTION
+
+    @classmethod
+    def diagnostic_category(cls) -> DiagnosticCategory:
+        return DiagnosticCategory.INSPECTION_ERROR
+
+
+class SqlExecutionError(MdccError):
+    @classmethod
+    def diagnostic_stage(cls) -> DiagnosticStage:
+        return DiagnosticStage.SQL
+
+    @classmethod
+    def diagnostic_category(cls) -> DiagnosticCategory:
+        return DiagnosticCategory.SQL_ERROR
+
+
 class DiagnosticCollector:
     def __init__(self) -> None:
         self._diagnostics: list[Diagnostic] = []
