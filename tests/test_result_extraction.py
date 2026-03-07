@@ -1,4 +1,4 @@
-"""Tests for T10 — Final Expression Capture and Typed Result Extraction.
+"""Tests for final expression capture and typed result extraction.
 
 Covers:
 - last-expression capture for bare expressions (scalar, DataFrame, Altair chart)
@@ -413,8 +413,8 @@ class TestUnpicklableExpressions:
     ) -> None:
         """A generator is a valid Python expression but not picklable.
 
-        T10 must not crash the subprocess; the result should flow
-        through to T11 as a typed validation failure.
+        The capture mechanism must not crash the subprocess; the result should flow
+        through as a typed validation failure.
         """
         result = _run_block(tmp_path, "(x for x in range(3))\n")
         assert result.status is ExecutionStatus.SUCCESS
@@ -423,7 +423,7 @@ class TestUnpicklableExpressions:
         assert result.raw_type_name is not None
         assert "generator" in result.raw_type_name
         # The actual value is None because pickle failed, but that's
-        # expected — T11 will use raw_type_name to classify the failure.
+        # expected — validation will use raw_type_name to classify the failure.
         assert result.raw_value is None
 
     def test_lambda_expression_does_not_raise_execution_error(
