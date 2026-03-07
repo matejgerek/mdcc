@@ -837,12 +837,12 @@ This section defines the discrete implementation tasks for completing the bundle
 
 ## 10.1 Phase 1b — Projects & Rendering
 
-### BT-01: Inspect Commands
+### BT-01: Inspect Commands (DONE)
 Implement the `mdcc inspect` command group.
 - **Scope**: `mdcc inspect <bundle>` (overview), `--source` prints canonical source, `--annotated` prints source with read-time dataset overlays.
 - **Notes**: Derived projection only; no source mutation.
 
-### BT-02: Render from Bundle
+### BT-02: Render from Bundle (DONE)
 Implement `mdcc render <bundle> -o <file.pdf>`.
 - **Scope**: Extend schema with `block_outputs` and `output_payloads`. Store Vega-Lite/Parquet semantic outputs during creation. Render by feeding these outputs into existing renderers.
 - **Notes**: Feature-detect `block_outputs` table presence in the bundle.
