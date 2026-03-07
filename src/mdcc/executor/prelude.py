@@ -24,7 +24,6 @@ import altair as alt
 import numpy as np
 import pandas as pd
 
-# Reserved for result extraction (T10).
 MDCC_RESULT_PATH = Path({result_path})
 MDCC_RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
 """
@@ -44,7 +43,7 @@ def _mdcc_save_result(_val):
         MDCC_RESULT_PATH.write_bytes(_mdcc_pickle.dumps(_envelope))
     except Exception as _mdcc_exc:
         # Value evaluated successfully but is not picklable.
-        # Record type metadata so downstream validation (T11) can
+        # Record type metadata so downstream validation can
         # classify the failure properly instead of raising an
         # execution error here.
         _fallback = {{

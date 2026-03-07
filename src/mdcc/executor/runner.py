@@ -75,7 +75,6 @@ def run_payload(
             exception_message=f"subprocess exited with status {completed.returncode}",
         )
 
-    # ── T10: extract final expression result ──
     raw_value, raw_type_name = extract_raw_value(payload.result_path)
 
     return BlockExecutionResult(
