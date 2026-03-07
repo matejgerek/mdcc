@@ -26,7 +26,7 @@ Most analytical report tools carry hidden state, noisy formats, or complex publi
 | LaTeX + scripts | Harder data integration |
 | BI tools / Excel | Not reproducible or automation-friendly |
 
-`mdcc` sits in the middle: simple like Markdown, reproducible like notebooks, and designed for AI-driven workflows.
+`mdcc` sits in the middle: simple like Markdown, reproducible like notebooks, and designed for AI-driven workflows. See the [Design Principles](docs/DESIGN_PRINCIPLES.md) for more on our core philosophy.
 
 ---
 
@@ -181,6 +181,7 @@ Failure categories: `READ_ERROR`, `PARSE_ERROR`, `VALIDATION_ERROR`, `EXECUTION_
 
 ## Docs
 
+- [`docs/DESIGN_PRINCIPLES.md`](docs/DESIGN_PRINCIPLES.md) — core philosophy and design goals
 - [`docs/SOURCE_FORMAT.md`](docs/SOURCE_FORMAT.md) — full source format reference
 - [`docs/COMPILER_USAGE.md`](docs/COMPILER_USAGE.md) — compiler stages, options, and failure interpretation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internal architecture and module structure
