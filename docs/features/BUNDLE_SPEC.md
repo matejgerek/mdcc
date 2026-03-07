@@ -233,6 +233,129 @@ For phase 1, this means the bundle contains:
 
 The PDF itself is **not** embedded in the bundle.
 
+## 5.6 Architecture integration
+
+This feature should be integrated as a new artifact layer on top of the existing compiler pipeline, not as a second parser / executor stack.
+
+The existing source-side stages should remain authoritative:
+
+- `reader.py` reads canonical source bytes
+- `parser.py` builds the `DocumentModel`
+- `validator.py` performs structural validation and typed result validation
+- `executor/` runs blocks in isolated subprocesses
+- `renderers/` continue to own block rendering and document assembly
+- `pdf.py` remains the only PDF generation layer
+
+Bundle support should attach to those seams rather than bypass them.
+
+### 5.6.1 Shared orchestration
+
+`mdcc compile` and `mdcc bundle create` should share the same early pipeline through typed block results.
+
+Recommended refactor:
+
+- keep `compile.py` as the source-to-PDF orchestrator
+- extract reusable helpers for document loading (`read` -> `parse` -> structure validation)
+- extract reusable helpers for block materialization (`payload build` -> `execute/cache resolve` -> typed result validation)
+- extract reusable helpers for rendering from typed block results
+
+A useful shared internal shape is a per-block compiled record containing:
+
+- the parsed block
+- the execution payload
+- the execution result
+- the validated typed result
+- dependency hashes / runtime manifests
+- the rendered artifact when rendering was requested
+
+This avoids duplicating pipeline logic between `compile`, `bundle create`, and later `render <bundle>`.
+
+To stay consistent with the current architecture invariant, new cross-stage bundle record types should live in `src/mdcc/models.py`.
+
+### 5.6.2 Bundle module boundary
+
+The bundle implementation should live under a dedicated `src/mdcc/bundle/` package.
+
+Recommended modules:
+
+- `builder.py` — builds an in-memory bundle model from the parsed document and compiled block records
+- `datasets.py` — extracts persisted datasets, computes fingerprints, and serializes payloads to Parquet
+- `store.py` — owns SQLite DDL, inserts, reads, and schema-version helpers
+- `validate.py` — validates bundle integrity and schema expectations
+- `inspect.py` — produces human-readable bundle and annotated-source projections
+- `sql.py` — registers dataset payloads in DuckDB and executes SQL
+- `render.py` — renders a PDF from a bundle using the existing renderer and PDF modules
+
+This keeps SQLite, DuckDB, inspection formatting, and source compilation concerns separated.
+
+### 5.6.3 Runtime capture extension
+
+The current execution prelude already records file dependencies. Bundle creation should extend the same mechanism with a second runtime manifest for dataset capture.
+
+Recommended approach:
+
+- extend `BuildContext` with deterministic paths for dataset manifests and temporary dataset payload files
+- keep the prelude responsible only for observing runtime facts
+- wrap supported pandas readers to record dataset captures in addition to file dependencies
+- let host-side bundle code decide which captures become persisted bundle datasets
+
+The prelude should not assign final bundle IDs or write SQLite directly. It should emit normalized capture facts such as:
+
+- source kind (`read_csv`, `read_parquet`, etc.)
+- normalized source path when one exists
+- row / column metadata
+- temporary payload location
+
+Primary rendered datasets should be derived outside the prelude:
+
+- table blocks can persist `TableResult.value` directly as the primary dataset
+- chart blocks should use a dedicated extractor over `ChartResult.value` / `ChartResult.spec`
+
+That keeps the execution sandbox simple and keeps bundle policy in normal Python modules instead of injected runtime code.
+
+### 5.6.4 Render-from-bundle contract
+
+Inspection and SQL querying can be satisfied by persisted datasets alone, but reproducible rendering cannot, especially for charts.
+
+For `mdcc render <bundle>` to fit the current architecture cleanly, phase 1b should persist **semantic block outputs** in the bundle using the same boundary already used by the cache:
+
+- charts: Vega-Lite / Altair spec JSON
+- tables: the primary dataframe payload used for final table rendering
+
+Recommended additional logical relations:
+
+- `block_outputs(block_id, output_kind, format, payload_id)`
+- `output_payloads(payload_id, blob_data)`
+
+With that addition, bundle rendering becomes:
+
+1. load canonical source and block metadata from SQLite
+2. load semantic block outputs from the bundle
+3. reuse existing block renderers to materialize `RenderedArtifact`s
+4. reuse `renderers/document.py` for assembly and HTML generation
+5. reuse `pdf.py` for final PDF creation
+
+Without persisted semantic outputs, `render <bundle>` would require re-executing source blocks against a bundle-specific compatibility layer, which cuts across the current execution and rendering boundaries.
+
+### 5.6.5 CLI and diagnostics fit
+
+The CLI should remain thin and keep `cli.py` as the only presentation / exit-code boundary.
+
+Recommended CLI shape:
+
+- add `bundle`, `dataset`, and `extract` command groups via Typer sub-apps
+- keep `inspect`, `sql`, and `render` as thin command adapters that delegate into dedicated modules
+- keep terminal formatting centralized in `cli.py`
+
+The diagnostics model should also be extended rather than overloaded. In addition to the current stages, bundle work will likely need dedicated typed errors for:
+
+- bundle open / schema errors
+- bundle validation errors
+- inspection lookup errors
+- SQL execution errors
+
+That maps naturally to additional `DiagnosticStage`, `DiagnosticCategory`, and `MdccError` subclasses instead of reporting bundle failures as generic validation errors.
+
 ## 5.7 Rejected alternatives
 
 ### ZIP archive of text + data files
@@ -476,6 +599,28 @@ At query time, `mdcc sql` extracts the blob, registers it as a named DuckDB rela
 - `ds_fig_revenue_primary`
 - `ds_regions_lookup`
 
+### `block_outputs` *(required for phase 1b rendering support)*
+
+Stores the semantic render input for a block.
+
+| Field | Type | Required | Description |
+|------|------|----------|-------------|
+| `block_id` | string | yes | Owning block. |
+| `output_kind` | string | yes | Semantic output kind, e.g. `chart_spec`, `table_frame`. |
+| `format` | string | yes | Serialization format, e.g. `vega_json`, `parquet`. |
+| `payload_id` | string | yes | References `output_payloads.payload_id`. |
+
+These outputs are distinct from persisted datasets. They exist so `mdcc render <bundle>` can reuse the existing rendering pipeline without re-executing block code.
+
+### `output_payloads` *(required for phase 1b rendering support)*
+
+Stores serialized semantic block outputs as blobs.
+
+| Field | Type | Required | Description |
+|------|------|----------|-------------|
+| `payload_id` | string | yes | Stable payload ID. |
+| `blob_data` | blob | yes | Serialized output payload. |
+
 ### Example
 
 Minimal logical example:
@@ -669,4 +814,3 @@ Recommended diagnostic categories:
 - `bundle_validation_error` — internal contract violation within a readable bundle
 - `inspection_error` — object requested by the user does not exist or cannot be displayed
 - `sql_error` — invalid SQL or SQL execution failure
-
