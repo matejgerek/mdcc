@@ -14,7 +14,7 @@ from mdcc.bundle.commands import (
     create_bundle as real_create_bundle,
 )
 from mdcc.cli import app
-from mdcc.errors import MdccError
+from mdcc.errors import ErrorContext, MdccError, ReadError
 from mdcc.compile import CompileOptions
 from mdcc.models import (
     BlockType,
@@ -579,3 +579,20 @@ def test_sql_command_rejects_file_option(cli_runner: CliRunner, tmp_path: Path) 
 
     assert result.exit_code == 1
     assert "SQL file input is not supported" in result.output
+
+
+def test_bundle_create_surfaces_read_error(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    error = ReadError.from_message(
+        "failed to read source file",
+        context=ErrorContext(source_path=tmp_source_file),
+    )
+
+    with patch("mdcc.cli.create_bundle", side_effect=error):
+        result = cli_runner.invoke(app, ["bundle", "create", str(tmp_source_file)])
+
+    assert result.exit_code == 1
+    assert "failed to read source file" in result.output
+    assert "stage: read" in result.output
+    assert f"file: {tmp_source_file}" in result.output

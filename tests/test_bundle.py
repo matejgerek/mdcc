@@ -10,6 +10,7 @@ from mdcc.bundle.commands import BundleCreateOptions, create_bundle
 from mdcc.bundle.sql import dataset_head, dataset_schema, list_datasets, run_sql
 from mdcc.bundle.store import read_bundle
 from mdcc.bundle.validate import validate_bundle
+from mdcc.errors import ReadError
 from mdcc.executor.runner import run_payloads as real_run_payloads
 
 
@@ -215,3 +216,20 @@ def test_validate_bundle_rejects_corrupt_payload(tmp_path: Path) -> None:
         validate_bundle(bundle_path)
 
     assert "payload is not readable parquet" in str(exc_info.value)
+
+
+def test_create_bundle_uses_standard_reader_errors_for_invalid_utf8(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "broken.md"
+    source.write_bytes(b"\xff")
+
+    with pytest.raises(ReadError) as exc_info:
+        create_bundle(
+            BundleCreateOptions(
+                input_path=source,
+                output_path=tmp_path / "broken.mdcx",
+            )
+        )
+
+    assert "failed to read source file" in str(exc_info.value)

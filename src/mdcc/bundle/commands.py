@@ -17,9 +17,12 @@ from mdcc.bundle.sql import (
 )
 from mdcc.bundle.store import read_bundle, write_bundle
 from mdcc.bundle.validate import validate_bundle
-from mdcc.compile import load_document_model, materialize_compiled_blocks
+from mdcc.compile import materialize_compiled_blocks
 from mdcc.models import BundleDatasetRecord
+from mdcc.parser import parse_document
+from mdcc.reader import read_source_document
 from mdcc.utils.workspace import BuildContext
+from mdcc.validator import assert_valid_document_structure
 
 
 class BundleCreateOptions(BaseModel):
@@ -31,8 +34,10 @@ class BundleCreateOptions(BaseModel):
 
 
 def create_bundle(options: BundleCreateOptions) -> Path:
-    source_text = options.input_path.read_text(encoding="utf-8")
-    document = load_document_model(options.input_path)
+    source_input = read_source_document(options.input_path)
+    source_text = source_input.raw_text
+    document = parse_document(source_input)
+    assert_valid_document_structure(document)
     with BuildContext.create(
         document.source_path, keep=options.keep_build_dir
     ) as build_context:
