@@ -3,6 +3,8 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+from pydantic import ValidationError as PydanticValidationError
+
 from mdcc.errors import BundleError
 from mdcc.models import (
     BundleBlockDatasetLink,
@@ -89,41 +91,46 @@ def read_bundle(path: Path) -> BundleModel:
     finally:
         connection.close()
 
-    columns_by_dataset: dict[str, list[BundleDatasetColumn]] = {}
-    for row in column_rows:
-        columns_by_dataset.setdefault(row["dataset_id"], []).append(
-            BundleDatasetColumn(
-                ordinal=row["ordinal"],
-                column_name=row["column_name"],
-                logical_type=row["logical_type"],
-                nullable=bool(row["nullable"]),
+    try:
+        columns_by_dataset: dict[str, list[BundleDatasetColumn]] = {}
+        for row in column_rows:
+            columns_by_dataset.setdefault(row["dataset_id"], []).append(
+                BundleDatasetColumn(
+                    ordinal=row["ordinal"],
+                    column_name=row["column_name"],
+                    logical_type=row["logical_type"],
+                    nullable=bool(row["nullable"]),
+                )
             )
+        return BundleModel(
+            meta=BundleMetaRecord.model_validate(dict(meta_row)),
+            document=BundleDocumentRecord.model_validate(dict(document_row)),
+            blocks=[BundleBlockRecord.model_validate(dict(row)) for row in block_rows],
+            datasets=[
+                BundleDatasetRecord.model_validate(
+                    {
+                        **dict(row),
+                        "columns": columns_by_dataset.get(row["dataset_id"], []),
+                    }
+                )
+                for row in dataset_rows
+            ],
+            block_datasets=[
+                BundleBlockDatasetLink.model_validate(dict(row))
+                for row in block_dataset_rows
+            ],
+            dataset_payloads=[
+                BundlePayloadRecord(
+                    payload_id=row["payload_id"], blob_data=row["blob_data"]
+                )
+                for row in payload_rows
+            ],
         )
-
-    return BundleModel(
-        meta=BundleMetaRecord.model_validate(dict(meta_row)),
-        document=BundleDocumentRecord.model_validate(dict(document_row)),
-        blocks=[BundleBlockRecord.model_validate(dict(row)) for row in block_rows],
-        datasets=[
-            BundleDatasetRecord.model_validate(
-                {
-                    **dict(row),
-                    "columns": columns_by_dataset.get(row["dataset_id"], []),
-                }
-            )
-            for row in dataset_rows
-        ],
-        block_datasets=[
-            BundleBlockDatasetLink.model_validate(dict(row))
-            for row in block_dataset_rows
-        ],
-        dataset_payloads=[
-            BundlePayloadRecord(
-                payload_id=row["payload_id"], blob_data=row["blob_data"]
-            )
-            for row in payload_rows
-        ],
-    )
+    except PydanticValidationError as exc:
+        raise BundleError.from_exception(
+            "invalid bundle: stored row contents failed validation",
+            exc,
+        ) from exc
 
 
 def list_tables(path: Path) -> set[str]:

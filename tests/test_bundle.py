@@ -10,7 +10,7 @@ from mdcc.bundle.commands import BundleCreateOptions, create_bundle
 from mdcc.bundle.sql import dataset_head, dataset_schema, list_datasets, run_sql
 from mdcc.bundle.store import read_bundle
 from mdcc.bundle.validate import validate_bundle
-from mdcc.errors import ReadError
+from mdcc.errors import BundleError, ReadError
 from mdcc.executor.runner import run_payloads as real_run_payloads
 
 
@@ -233,3 +233,77 @@ def test_create_bundle_uses_standard_reader_errors_for_invalid_utf8(
         )
 
     assert "failed to read source file" in str(exc_info.value)
+
+
+def test_read_bundle_wraps_invalid_row_values_as_bundle_error(tmp_path: Path) -> None:
+    bundle_path = tmp_path / "broken-rows.mdcx"
+    connection = sqlite3.connect(bundle_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE bundle_meta (
+                format_version TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                mdcc_version TEXT NOT NULL,
+                source_filename TEXT,
+                source_sha256 TEXT NOT NULL
+            );
+            INSERT INTO bundle_meta VALUES ('1', 'now', '0.1.0', NULL, 'abc');
+
+            CREATE TABLE documents (
+                document_id TEXT PRIMARY KEY,
+                title TEXT,
+                source_text TEXT NOT NULL
+            );
+            INSERT INTO documents VALUES ('doc_main', NULL, '# report');
+
+            CREATE TABLE blocks (
+                block_id TEXT PRIMARY KEY,
+                block_type TEXT NOT NULL,
+                source_start_line INTEGER NOT NULL,
+                source_end_line INTEGER NOT NULL,
+                label TEXT,
+                caption TEXT
+            );
+            INSERT INTO blocks VALUES ('block-0001', 'not_a_block_type', 1, 1, NULL, NULL);
+
+            CREATE TABLE datasets (
+                dataset_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                format TEXT NOT NULL,
+                role_summary TEXT NOT NULL,
+                row_count INTEGER NOT NULL,
+                column_count INTEGER NOT NULL,
+                source_kind TEXT NOT NULL,
+                payload_id TEXT NOT NULL,
+                fingerprint TEXT NOT NULL
+            );
+
+            CREATE TABLE dataset_columns (
+                dataset_id TEXT NOT NULL,
+                ordinal INTEGER NOT NULL,
+                column_name TEXT NOT NULL,
+                logical_type TEXT NOT NULL,
+                nullable INTEGER NOT NULL
+            );
+
+            CREATE TABLE block_datasets (
+                block_id TEXT NOT NULL,
+                dataset_id TEXT NOT NULL,
+                role TEXT NOT NULL
+            );
+
+            CREATE TABLE dataset_payloads (
+                payload_id TEXT PRIMARY KEY,
+                blob_data BLOB NOT NULL
+            );
+            """
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(BundleError) as exc_info:
+        read_bundle(bundle_path)
+
+    assert "stored row contents failed validation" in str(exc_info.value)
