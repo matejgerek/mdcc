@@ -6,6 +6,9 @@ This folder contains a complete file-backed `mdcc` example:
 - `data/market-data.json`: monthly market metrics
 - `data/region-targets.csv`: region-level target data
 
+The example also demonstrates phase-1 block metadata by adding `caption="..."`
+and `label="..."` attributes to its chart and table fences.
+
 ## How to Run
 
 From the repository root:

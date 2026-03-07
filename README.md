@@ -108,6 +108,24 @@ Each block runs in its own isolated Python process. The packages `pandas` (as `p
 
 The **last expression** in the block is the output — no explicit render calls needed.
 
+Executable fences also support optional inline metadata attributes for rendering:
+
+- `caption="..."` renders a caption with the block output
+- `label="..."` assigns a stable block label for future references and HTML anchors
+
+Example:
+
+````markdown
+```mdcc_chart caption="Revenue by region" label="fig:revenue-region"
+data = pd.read_csv("data/results.csv")
+alt.Chart(data).mark_line().encode(
+    x="month:N",
+    y="revenue:Q",
+    color="region:N",
+)
+```
+````
+
 #### `mdcc_table` — produces a DataFrame rendered as a table
 
 ````markdown

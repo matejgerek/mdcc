@@ -55,6 +55,40 @@ Used for generating data tables.
 - **Built-in tools**: `pd`, `np`.
 - **Expected Output**: A `pandas.DataFrame`.
 
+### 3.3 Block Metadata Attributes
+Executable fence headers may include inline metadata attributes after the block type:
+
+````text
+```mdcc_chart caption="Revenue by region" label="fig:revenue-region"
+```
+````
+
+Phase 1 supports:
+- `caption`: rendered with the block output
+- `label`: preserved as block metadata and emitted as an HTML anchor/attribute
+
+Rules:
+- attributes must use `key="value"` form
+- attributes must be separated by whitespace
+- duplicate keys are invalid
+- unknown keys are invalid
+- `caption` must not be empty after trimming
+- `label` must match `^[A-Za-z][A-Za-z0-9:_-]*$`
+
+Examples:
+
+````markdown
+```mdcc_chart caption="Revenue by region"
+alt.Chart(frame).mark_line().encode(x="month", y="revenue")
+```
+````
+
+````markdown
+```mdcc_table caption="Regional summary" label="tbl:regional-summary"
+summary_df
+```
+````
+
 ---
 
 ## 4. Last-Expression Output Rules

@@ -108,6 +108,11 @@ class BaseNode(BaseModel):
     location: SourceLocation | None = None
 
 
+class BlockMetadata(BaseModel):
+    caption: str | None = None
+    label: str | None = None
+
+
 class MarkdownNode(BaseNode):
     kind: NodeKind = Field(default=NodeKind.MARKDOWN)
     text: str
@@ -118,6 +123,8 @@ class ExecutableBlockNode(BaseNode):
     block_type: BlockType
     code: str
     block_index: int = Field(ge=0)
+    metadata: BlockMetadata = Field(default_factory=BlockMetadata)
+    raw_metadata: tuple[tuple[str, str], ...] = Field(default_factory=tuple)
 
 
 DocumentNode = MarkdownNode | ExecutableBlockNode
@@ -278,6 +285,7 @@ __all__ = [
     "AssembledDocument",
     "AssembledDocumentNode",
     "BaseNode",
+    "BlockMetadata",
     "BlockExecutionResult",
     "BlockType",
     "ChartResult",

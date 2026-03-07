@@ -47,6 +47,9 @@ def test_parse_document_with_markdown_and_executable_blocks() -> None:
     assert first_block.block_type is BlockType.CHART
     assert first_block.block_index == 0
     assert first_block.code == "chart_code()\n"
+    assert first_block.metadata.caption is None
+    assert first_block.metadata.label is None
+    assert first_block.raw_metadata == ()
     assert second_block.block_type is BlockType.TABLE
     assert second_block.block_index == 1
 
@@ -80,17 +83,103 @@ def test_parse_document_rejects_unsupported_mdcc_block_type() -> None:
     assert "unsupported or malformed executable block fence" in str(exc_info.value)
 
 
-def test_parse_document_rejects_executable_fence_metadata() -> None:
+def test_parse_document_accepts_executable_fence_metadata() -> None:
     source = SourceDocumentInput(
         source_path=Path("report.md"),
         raw_text="",
-        body_text='```mdcc_chart width="wide"\ncontent\n```\n',
+        body_text=(
+            '```mdcc_chart caption="Revenue by region" label="fig:revenue-region"\n'
+            "content\n"
+            "```\n"
+        ),
+    )
+
+    document = parse_document(source)
+
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].block_type is BlockType.CHART
+    assert document.nodes[0].raw_metadata == (
+        ("caption", "Revenue by region"),
+        ("label", "fig:revenue-region"),
+    )
+    assert document.nodes[0].metadata.caption is None
+    assert document.nodes[0].metadata.label is None
+
+
+def test_parse_document_accepts_caption_only_metadata() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text='```mdcc_chart caption="Revenue by region"\ncontent\n```\n',
+    )
+
+    document = parse_document(source)
+
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].raw_metadata == (("caption", "Revenue by region"),)
+
+
+def test_parse_document_accepts_label_only_metadata() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text='```mdcc_table label="tbl:summary"\ncontent\n```\n',
+    )
+
+    document = parse_document(source)
+
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].raw_metadata == (("label", "tbl:summary"),)
+
+
+def test_parse_document_accepts_metadata_with_variable_spacing() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text=(
+            '```mdcc_table   caption="Regional summary"    label="tbl:summary"\n'
+            "summary_df\n"
+            "```\n"
+        ),
+    )
+
+    document = parse_document(source)
+
+    assert len(document.nodes) == 1
+    assert isinstance(document.nodes[0], ExecutableBlockNode)
+    assert document.nodes[0].raw_metadata == (
+        ("caption", "Regional summary"),
+        ("label", "tbl:summary"),
+    )
+
+
+def test_parse_document_rejects_malformed_executable_fence_metadata() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text="```mdcc_chart caption=Revenue\ncontent\n```\n",
     )
 
     with pytest.raises(ParseError) as exc_info:
         parse_document(source)
 
-    assert "unsupported or malformed executable block fence" in str(exc_info.value)
+    assert "malformed executable block metadata attributes" in str(exc_info.value)
+
+
+def test_parse_document_rejects_adjacent_metadata_without_whitespace() -> None:
+    source = SourceDocumentInput(
+        source_path=Path("report.md"),
+        raw_text="",
+        body_text='```mdcc_chart caption="Revenue"label="fig:revenue"\ncontent\n```\n',
+    )
+
+    with pytest.raises(ParseError) as exc_info:
+        parse_document(source)
+
+    assert "malformed executable block metadata attributes" in str(exc_info.value)
 
 
 def test_parse_document_rejects_unclosed_executable_fence() -> None:

@@ -11,6 +11,7 @@ from mdcc.errors import RenderingError
 from mdcc.models import (
     AssembledDocumentNode,
     ArtifactKind,
+    BlockMetadata,
     BlockType,
     ChartResult,
     DocumentModel,
@@ -59,12 +60,14 @@ def _block(
     index: int,
     block_type: BlockType,
     code: str,
+    metadata: BlockMetadata | None = None,
 ) -> ExecutableBlockNode:
     return ExecutableBlockNode(
         node_id=f"block-{index + 1:04d}",
         block_type=block_type,
         code=code,
         block_index=index,
+        metadata=metadata or BlockMetadata(),
         location=_location(source_path, index + 1, code.strip()),
     )
 
@@ -126,6 +129,10 @@ def _chart_and_table_document(
         index=0,
         block_type=BlockType.CHART,
         code="chart",
+        metadata=BlockMetadata(
+            caption="Revenue by region",
+            label="fig:revenue-region",
+        ),
     )
     bridge = _markdown_node(
         source_path=source,
@@ -138,6 +145,10 @@ def _chart_and_table_document(
         index=1,
         block_type=BlockType.TABLE,
         code="frame",
+        metadata=BlockMetadata(
+            caption="Regional summary",
+            label="tbl:regional-summary",
+        ),
     )
     document = DocumentModel(
         source_path=source,
@@ -463,6 +474,17 @@ def test_render_intermediate_document_renders_html_in_document_order(
     assert "<svg" in html
     assert "<table" in html
     assert "Bridge paragraph" in html
+    assert 'id="fig:revenue-region"' in html
+    assert 'data-label="fig:revenue-region"' in html
+    assert 'id="tbl:regional-summary"' in html
+    assert 'data-label="tbl:regional-summary"' in html
+
+    chart_caption_index = html.index("Revenue by region")
+    chart_svg_index = html.index("<svg")
+    table_caption_index = html.index("Regional summary")
+    table_html_index = html.index("<table")
+    assert chart_svg_index < chart_caption_index
+    assert table_caption_index < table_html_index
 
 
 def test_render_intermediate_document_inserts_frontmatter_metadata(
@@ -492,6 +514,34 @@ def test_render_intermediate_document_inserts_frontmatter_metadata(
     assert "<h1>Quarterly Review</h1>" in intermediate.html
     assert "<p>Analyst</p>" in intermediate.html
     assert "<p>2026-03-06</p>" in intermediate.html
+
+
+def test_render_intermediate_document_omits_label_attributes_when_absent(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path)
+    block = _block(
+        source_path=source,
+        index=0,
+        block_type=BlockType.TABLE,
+        code="frame",
+        metadata=BlockMetadata(caption="Caption only"),
+    )
+    document = DocumentModel(source_path=source, nodes=[block])
+    result = TableResult(block=block, value=pd.DataFrame({"region": ["na"]}))
+    build_context = BuildContext.create(source, keep=True)
+    assembled = assemble_document(
+        document, [render_table_artifact(result, build_context)]
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert "Caption only" in intermediate.html
+    assert (
+        '<section class="mdcc-artifact mdcc-table" data-block-id="block-0001">'
+        in intermediate.html
+    )
+    assert "data-label=" not in intermediate.html
 
 
 def test_render_intermediate_document_raises_when_chart_svg_is_missing(

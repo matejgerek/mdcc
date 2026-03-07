@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import re
 
 import altair as alt
 import pandas as pd
@@ -9,6 +10,7 @@ from mdcc.errors import ErrorContext, ValidationError
 from mdcc.models import (
     BlockType,
     BlockExecutionResult,
+    BlockMetadata,
     ChartResult,
     DocumentModel,
     ExecutableBlockNode,
@@ -28,6 +30,8 @@ _SUPPORTED_CHART_TYPES = (
     alt.HConcatChart,
     alt.VConcatChart,
 )
+_SUPPORTED_BLOCK_METADATA_KEYS = frozenset({"caption", "label"})
+_LABEL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9:_-]*$")
 
 
 def validate_document_structure(
@@ -192,6 +196,7 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
                 )
             )
 
+        issues.extend(_validate_block_metadata(node))
         executable_indices.append(node.block_index)
 
     issues.extend(_validate_executable_indices(document.nodes, executable_indices))
@@ -218,6 +223,75 @@ def _validate_executable_indices(
                 ),
                 location=first_block.location if first_block is not None else None,
             )
+        )
+
+    return issues
+
+
+def _validate_block_metadata(node: ExecutableBlockNode) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    normalized: dict[str, str] = {}
+    seen_keys: set[str] = set()
+
+    for key, value in node.raw_metadata:
+        if key in seen_keys:
+            issues.append(
+                ValidationIssue(
+                    severity=ValidationSeverity.ERROR,
+                    code="block-metadata-key-duplicate",
+                    message=f"duplicate metadata key '{key}'",
+                    location=node.location,
+                )
+            )
+            continue
+
+        seen_keys.add(key)
+
+        if key not in _SUPPORTED_BLOCK_METADATA_KEYS:
+            issues.append(
+                ValidationIssue(
+                    severity=ValidationSeverity.ERROR,
+                    code="block-metadata-key-unknown",
+                    message=(
+                        f"unsupported metadata key '{key}' for {node.block_type.value} "
+                        "in this compiler version"
+                    ),
+                    location=node.location,
+                )
+            )
+            continue
+
+        normalized[key] = value.strip()
+
+    caption = normalized.get("caption")
+    if caption is not None and caption == "":
+        issues.append(
+            ValidationIssue(
+                severity=ValidationSeverity.ERROR,
+                code="block-metadata-caption-empty",
+                message="caption must not be empty",
+                location=node.location,
+            )
+        )
+
+    label = normalized.get("label")
+    if label is not None and not _LABEL_PATTERN.fullmatch(label):
+        issues.append(
+            ValidationIssue(
+                severity=ValidationSeverity.ERROR,
+                code="block-metadata-label-invalid",
+                message=(
+                    f"invalid label '{label}'; expected pattern "
+                    r"^[A-Za-z][A-Za-z0-9:_-]*$"
+                ),
+                location=node.location,
+            )
+        )
+
+    if not any(issue.severity is ValidationSeverity.ERROR for issue in issues):
+        node.metadata = BlockMetadata(
+            caption=caption,
+            label=label,
         )
 
     return issues

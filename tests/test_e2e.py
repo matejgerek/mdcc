@@ -8,7 +8,7 @@ import pytest
 
 from mdcc import pdf as pdf_module
 from mdcc.compile import CompileOptions, compile as run_compile
-from mdcc.errors import ExecutionError, ValidationError
+from mdcc.errors import ExecutionError, ParseError, ValidationError
 from mdcc.utils.workspace import BUILD_DIR_NAME
 
 
@@ -66,6 +66,42 @@ def test_compile_generates_pdf_for_document_with_narrative_chart_and_table(
     assert result == output_path
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+    assert output_path.read_bytes().startswith(b"%PDF")
+    assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
+def test_compile_generates_pdf_for_document_with_block_metadata(
+    tmp_path: Path,
+) -> None:
+    _require_weasyprint()
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: Metadata Report
+        ---
+
+        ```mdcc_chart caption="Revenue by region" label="fig:revenue-region"
+        frame = pd.DataFrame({"quarter": ["Q1", "Q2"], "revenue": [10, 15]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+
+        ```mdcc_table caption="Regional summary" label="tbl:regional-summary"
+        pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 15]})
+        ```
+        """,
+    )
+    output_path = tmp_path / "metadata-report.pdf"
+
+    result = run_compile(
+        CompileOptions(
+            input_path=source,
+            output_path=output_path,
+        )
+    )
+
+    assert result == output_path
+    assert output_path.exists()
     assert output_path.read_bytes().startswith(b"%PDF")
     assert not (tmp_path / BUILD_DIR_NAME).exists()
 
@@ -168,6 +204,62 @@ def test_compile_propagates_typed_result_validation_failure(tmp_path: Path) -> N
     assert diagnostic.actual_output_type == "builtins.int"
     assert not output_path.exists()
     assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
+def test_compile_rejects_phase_two_metadata_keys_during_validation(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_chart caption="Revenue" width="wide"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+    output_path = tmp_path / "invalid-metadata.pdf"
+
+    with pytest.raises(ValidationError) as exc_info:
+        run_compile(
+            CompileOptions(
+                input_path=source,
+                output_path=output_path,
+            )
+        )
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.stage.value == "validation"
+    assert diagnostic.message == (
+        "unsupported metadata key 'width' for mdcc_chart in this compiler version"
+    )
+    assert not output_path.exists()
+    assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
+def test_compile_does_not_reject_phase_two_metadata_key_in_parser(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_chart caption="Revenue" width="wide"
+        chart
+        ```
+        """,
+    )
+
+    try:
+        run_compile(
+            CompileOptions(
+                input_path=source,
+                output_path=tmp_path / "ignored.pdf",
+            )
+        )
+    except ValidationError:
+        pass
+    except ParseError as exc:  # pragma: no cover - regression guard
+        pytest.fail(f"metadata key should fail in validation, not parsing: {exc}")
 
 
 def test_compile_propagates_execution_failure_before_later_stages(

@@ -8,7 +8,7 @@ date: 2026-03-07
 
 This example document reads external data files from the local `data/` folder.
 It demonstrates how `mdcc` can combine narrative text, JSON input, CSV input,
-tables, and charts in a single compiled report.
+tables, charts, and block metadata in a single compiled report.
 
 ## Data Sources
 
@@ -22,7 +22,7 @@ That is expected behavior in `mdcc`.
 
 ## Dataset Summary
 
-```mdcc_table
+```mdcc_table caption="Dataset summary for the bundled market inputs" label="tbl:dataset-summary"
 market = pd.read_json("data/market-data.json")
 targets = pd.read_csv("data/region-targets.csv")
 
@@ -53,7 +53,7 @@ summary
 The first chart reads the JSON file and plots monthly revenue trajectories by
 region.
 
-```mdcc_chart
+```mdcc_chart caption="Monthly revenue trajectories by region" label="fig:revenue-trend"
 market = pd.read_json("data/market-data.json")
 month_order = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"]
 
@@ -69,12 +69,14 @@ alt.Chart(market).mark_line(point=True, strokeWidth=3).encode(
 )
 ```
 
+This is a reference to the chart above @fig:revenue-trend.
+
 ## Target Attainment
 
 This table joins the JSON and CSV files so the report can compare June actuals
 against target expectations.
 
-```mdcc_table
+```mdcc_table caption="June revenue and customer attainment versus targets" label="tbl:target-attainment"
 market = pd.read_json("data/market-data.json")
 targets = pd.read_csv("data/region-targets.csv")
 
@@ -110,7 +112,7 @@ merged[
 This chart uses the same joined data to compare customer scale, revenue, and
 gross profit in one view.
 
-```mdcc_chart
+```mdcc_chart caption="June customer scale, revenue, and gross profit by strategy band" label="fig:bubble-view"
 market = pd.read_json("data/market-data.json")
 targets = pd.read_csv("data/region-targets.csv")
 

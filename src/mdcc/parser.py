@@ -20,6 +20,7 @@ FENCE_RE = re.compile(
 )
 CLOSE_FENCE_RE = re.compile(r"^(?P<indent>[ \t]{0,3})(?P<fence>`{3,}|~{3,})[ \t]*$")
 SUPPORTED_BLOCK_TYPES = {block_type.value: block_type for block_type in BlockType}
+ATTRIBUTE_RE = re.compile(r'(?P<key>[A-Za-z][A-Za-z0-9_-]*)="(?P<value>[^"\r\n]*)"')
 
 
 @dataclass
@@ -28,6 +29,8 @@ class FenceState:
     open_line: int
     open_line_text: str
     info_string: str
+    block_type: BlockType | None = None
+    raw_metadata: tuple[tuple[str, str], ...] = ()
 
 
 def parse_document(source: SourceDocumentInput) -> DocumentModel:
@@ -89,9 +92,11 @@ def parse_document(source: SourceDocumentInput) -> DocumentModel:
                 nodes.append(
                     ExecutableBlockNode(
                         node_id=f"block-{executable_block_index:04d}",
-                        block_type=SUPPORTED_BLOCK_TYPES[executable_state.info_string],
+                        block_type=executable_state.block_type
+                        or SUPPORTED_BLOCK_TYPES[executable_state.info_string],
                         code="".join(executable_lines),
                         block_index=executable_block_index - 1,
+                        raw_metadata=executable_state.raw_metadata,
                         location=_build_location(
                             source_path=source.source_path,
                             start_line=executable_state.open_line,
@@ -115,14 +120,8 @@ def parse_document(source: SourceDocumentInput) -> DocumentModel:
 
         opener = _parse_fence_opener(line, line_number)
         if opener is not None:
-            if opener.info_string.startswith("mdcc_"):
-                if opener.info_string not in SUPPORTED_BLOCK_TYPES:
-                    raise _build_parse_error(
-                        message=f"unsupported or malformed executable block fence: {opener.info_string}",
-                        source=source,
-                        line_number=line_number,
-                        line_text=line,
-                    )
+            if _looks_like_executable_fence(opener.info_string):
+                opener = _parse_executable_fence_header(opener, source)
 
                 flush_markdown()
                 executable_state = opener
@@ -163,6 +162,87 @@ def _parse_fence_opener(line: str, line_number: int) -> FenceState | None:
         open_line_text=line,
         info_string=match.group("info").strip(),
     )
+
+
+def _looks_like_executable_fence(info_string: str) -> bool:
+    first_token = info_string.split(maxsplit=1)[0] if info_string else ""
+    return first_token.startswith("mdcc_")
+
+
+def _parse_executable_fence_header(
+    opener: FenceState,
+    source: SourceDocumentInput,
+) -> FenceState:
+    info_string = opener.info_string
+    parts = info_string.split(maxsplit=1)
+    block_name = parts[0] if parts else ""
+    attribute_text = parts[1] if len(parts) == 2 else ""
+
+    if block_name not in SUPPORTED_BLOCK_TYPES:
+        raise _build_parse_error(
+            message=f"unsupported or malformed executable block fence: {info_string}",
+            source=source,
+            line_number=opener.open_line,
+            line_text=opener.open_line_text,
+        )
+
+    return FenceState(
+        fence=opener.fence,
+        open_line=opener.open_line,
+        open_line_text=opener.open_line_text,
+        info_string=block_name,
+        block_type=SUPPORTED_BLOCK_TYPES[block_name],
+        raw_metadata=_parse_metadata_attributes(
+            attribute_text,
+            source=source,
+            line_number=opener.open_line,
+            line_text=opener.open_line_text,
+        ),
+    )
+
+
+def _parse_metadata_attributes(
+    attribute_text: str,
+    *,
+    source: SourceDocumentInput,
+    line_number: int,
+    line_text: str,
+) -> tuple[tuple[str, str], ...]:
+    if not attribute_text.strip():
+        return ()
+
+    parsed: list[tuple[str, str]] = []
+    position = 0
+    length = len(attribute_text)
+
+    while position < length:
+        while position < length and attribute_text[position].isspace():
+            position += 1
+
+        if position >= length:
+            break
+
+        match = ATTRIBUTE_RE.match(attribute_text, position)
+        if match is None:
+            raise _build_parse_error(
+                message="malformed executable block metadata attributes",
+                source=source,
+                line_number=line_number,
+                line_text=line_text,
+            )
+
+        parsed.append((match.group("key"), match.group("value")))
+        position = match.end()
+
+        if position < length and not attribute_text[position].isspace():
+            raise _build_parse_error(
+                message="malformed executable block metadata attributes",
+                source=source,
+                line_number=line_number,
+                line_text=line_text,
+            )
+
+    return tuple(parsed)
 
 
 def _is_matching_close(line: str, opener_fence: str) -> bool:

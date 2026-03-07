@@ -4,7 +4,7 @@ from collections.abc import Sequence
 
 import mistune
 from jinja2 import Environment, select_autoescape
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
 from mdcc.errors import ErrorContext, RenderingError
 from mdcc.models import (
@@ -78,6 +78,17 @@ _DOCUMENT_TEMPLATE = Environment(
         height: auto;
         max-width: 100%;
       }
+      .mdcc-caption {
+        color: #374151;
+        font-size: 10pt;
+        line-height: 1.4;
+      }
+      .mdcc-caption--table {
+        margin: 0 0 0.5rem;
+      }
+      .mdcc-caption--chart {
+        margin: 0.5rem 0 0;
+      }
     </style>
   </head>
   <body>
@@ -119,6 +130,7 @@ def assemble_document(
         if (
             artifact.block.block_index != parsed_block.block_index
             or artifact.block.block_type is not parsed_block.block_type
+            or artifact.block.metadata != parsed_block.metadata
         ):
             raise RenderingError.from_message(
                 "rendered artifact block metadata does not match parsed document block",
@@ -281,9 +293,11 @@ def _render_chart_artifact_html(artifact: RenderedArtifact) -> str:
             source_snippet=_source_snippet(artifact.block),
         ) from exc
 
+    caption = _render_caption_html(artifact, variant="chart")
     return (
-        f'<section class="mdcc-artifact mdcc-chart" data-block-id="{artifact.block.node_id}">'
+        f"<section {_artifact_attributes(artifact, 'mdcc-artifact mdcc-chart')}>"
         f"{svg}"
+        f"{caption}"
         "</section>"
     )
 
@@ -296,10 +310,35 @@ def _render_table_artifact_html(artifact: RenderedArtifact) -> str:
             source_snippet=_source_snippet(artifact.block),
         )
 
+    caption = _render_caption_html(artifact, variant="table")
     return (
-        f'<section class="mdcc-artifact mdcc-table" data-block-id="{artifact.block.node_id}">'
+        f"<section {_artifact_attributes(artifact, 'mdcc-artifact mdcc-table')}>"
+        f"{caption}"
         f"{artifact.html}"
         "</section>"
+    )
+
+
+def _artifact_attributes(artifact: RenderedArtifact, class_name: str) -> str:
+    attributes = [
+        f'class="{escape(class_name)}"',
+        f'data-block-id="{escape(artifact.block.node_id)}"',
+    ]
+    label = artifact.block.metadata.label
+    if label is not None:
+        escaped = escape(label)
+        attributes.append(f'id="{escaped}"')
+        attributes.append(f'data-label="{escaped}"')
+    return " ".join(attributes)
+
+
+def _render_caption_html(artifact: RenderedArtifact, *, variant: str) -> str:
+    caption = artifact.block.metadata.caption
+    if caption is None:
+        return ""
+
+    return (
+        f'<p class="mdcc-caption mdcc-caption--{escape(variant)}">{escape(caption)}</p>'
     )
 
 

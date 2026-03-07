@@ -7,6 +7,7 @@ import pytest
 from mdcc.errors import ValidationError
 from mdcc.models import (
     BlockType,
+    BlockMetadata,
     DocumentModel,
     ExecutableBlockNode,
     Frontmatter,
@@ -37,6 +38,7 @@ def test_validate_document_structure_accepts_valid_document() -> None:
                 block_type=BlockType.CHART,
                 code="chart_code()\n",
                 block_index=0,
+                metadata=BlockMetadata(),
                 location=_location("report.md", 3, 5),
             ),
         ],
@@ -109,6 +111,7 @@ def test_validate_document_structure_rejects_non_contiguous_block_indices() -> N
                 block_type=BlockType.CHART,
                 code="chart_code()\n",
                 block_index=1,
+                metadata=BlockMetadata(),
                 location=_location("report.md", 1, 3),
             )
         ],
@@ -133,6 +136,128 @@ def test_assert_valid_document_structure_raises_structured_error() -> None:
     assert diagnostic.message == "node node-0001 is missing source location metadata"
     assert diagnostic.exception_message is not None
     assert "node-location-missing" in diagnostic.exception_message
+
+
+def test_validate_document_structure_normalizes_valid_block_metadata() -> None:
+    block = ExecutableBlockNode(
+        node_id="block-0001",
+        block_type=BlockType.TABLE,
+        code="frame\n",
+        block_index=0,
+        raw_metadata=(
+            ("caption", "  Regional summary  "),
+            ("label", "tbl:summary"),
+        ),
+        location=_location("report.md", 3, 5),
+    )
+    document = DocumentModel(source_path=Path("report.md"), nodes=[block])
+
+    result = validate_document_structure(document)
+
+    assert result.ok is True
+    assert block.metadata == BlockMetadata(
+        caption="Regional summary",
+        label="tbl:summary",
+    )
+
+
+def test_validate_document_structure_rejects_duplicate_block_metadata_keys() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(("caption", "A"), ("caption", "B")),
+                location=_location("report.md", 3, 5),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "block-metadata-key-duplicate" for issue in result.issues)
+    assert any(
+        issue.message == "duplicate metadata key 'caption'" for issue in result.issues
+    )
+    assert all(issue.location == document.nodes[0].location for issue in result.issues)
+
+
+def test_validate_document_structure_rejects_unknown_block_metadata_keys() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(("width", "wide"),),
+                location=_location("report.md", 3, 5),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "block-metadata-key-unknown" for issue in result.issues)
+    assert any(
+        issue.message
+        == "unsupported metadata key 'width' for mdcc_chart in this compiler version"
+        for issue in result.issues
+    )
+
+
+def test_validate_document_structure_rejects_empty_caption() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.TABLE,
+                code="frame\n",
+                block_index=0,
+                raw_metadata=(("caption", "   "),),
+                location=_location("report.md", 3, 5),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "block-metadata-caption-empty" for issue in result.issues)
+    assert any(issue.message == "caption must not be empty" for issue in result.issues)
+
+
+def test_validate_document_structure_rejects_invalid_label() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.TABLE,
+                code="frame\n",
+                block_index=0,
+                raw_metadata=(("label", "regional summary"),),
+                location=_location("report.md", 3, 5),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "block-metadata-label-invalid" for issue in result.issues)
+    assert any(
+        issue.message
+        == "invalid label 'regional summary'; expected pattern ^[A-Za-z][A-Za-z0-9:_-]*$"
+        for issue in result.issues
+    )
 
 
 def _location(source_path: str, start_line: int, end_line: int) -> SourceLocation:
