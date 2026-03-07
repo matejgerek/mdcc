@@ -126,6 +126,13 @@ alt.Chart(data).mark_line().encode(
 ```
 ````
 
+Markdown prose can reference labeled blocks using `@label` syntax:
+
+```markdown
+The trend can be seen in @fig:revenue-region.
+Metrics are summarized in @tbl:regional-summary.
+```
+
 #### `mdcc_table` — produces a DataFrame rendered as a table
 
 ````markdown

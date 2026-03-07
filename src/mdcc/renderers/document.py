@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, cast
 
 import mistune
 from jinja2 import Environment, select_autoescape
@@ -18,8 +19,14 @@ from mdcc.models import (
     NodeKind,
     RenderedArtifact,
 )
+from mdcc.references import (
+    REFERENCE_PATTERN,
+    ReferenceRegistry,
+    build_reference_registry,
+)
 
 _MARKDOWN_RENDERER = mistune.create_markdown()
+_MARKDOWN_AST_RENDERER = mistune.create_markdown(renderer="ast")
 _DOCUMENT_TEMPLATE = Environment(
     autoescape=select_autoescape(
         enabled_extensions=("html", "xml"),
@@ -167,10 +174,11 @@ def assemble_document(
 
 def render_intermediate_document(document: AssembledDocument) -> IntermediateDocument:
     """Render an assembled document into the intermediate HTML form."""
+    reference_registry = _build_reference_registry(document)
     body_fragments: list[str] = []
     for node in document.nodes:
         try:
-            body_fragments.append(_render_assembled_node(node))
+            body_fragments.append(_render_assembled_node(node, reference_registry))
         except RenderingError:
             raise
         except Exception as exc:
@@ -230,20 +238,30 @@ def _source_snippet(block: ExecutableBlockNode) -> str | None:
     return location.snippet if location is not None else None
 
 
-def _render_assembled_node(node: AssembledDocumentNode) -> str:
+def _render_assembled_node(
+    node: AssembledDocumentNode,
+    reference_registry: ReferenceRegistry,
+) -> str:
     if node.markdown is not None:
-        return _render_markdown_node(node.markdown)
+        return _render_markdown_node(node.markdown, reference_registry)
     if node.artifact is not None:
-        return _render_artifact(node.artifact)
+        return _render_artifact(node.artifact, reference_registry)
 
     raise RenderingError.from_message(
         "assembled document node is missing renderable payload"
     )
 
 
-def _render_markdown_node(node: MarkdownNode) -> str:
+def _render_markdown_node(
+    node: MarkdownNode,
+    reference_registry: ReferenceRegistry,
+) -> str:
     try:
-        html = _MARKDOWN_RENDERER(node.text)
+        tokens_result, state = _MARKDOWN_AST_RENDERER.parse(node.text)
+        tokens = cast(list[dict[str, Any]], tokens_result)
+        _replace_references_in_tokens(tokens, node, reference_registry)
+        renderer = cast(mistune.HTMLRenderer, _MARKDOWN_RENDERER.renderer)
+        html = renderer.render_tokens(tokens, state)
     except Exception as exc:
         raise RenderingError.from_exception(
             "failed to render markdown node",
@@ -262,11 +280,14 @@ def _render_markdown_node(node: MarkdownNode) -> str:
     )
 
 
-def _render_artifact(artifact: RenderedArtifact) -> str:
+def _render_artifact(
+    artifact: RenderedArtifact,
+    reference_registry: ReferenceRegistry,
+) -> str:
     if artifact.kind.value == "chart":
-        return _render_chart_artifact_html(artifact)
+        return _render_chart_artifact_html(artifact, reference_registry)
     if artifact.kind.value == "table":
-        return _render_table_artifact_html(artifact)
+        return _render_table_artifact_html(artifact, reference_registry)
 
     raise RenderingError.from_message(
         "rendered artifact has unsupported kind for document rendering",
@@ -275,7 +296,10 @@ def _render_artifact(artifact: RenderedArtifact) -> str:
     )
 
 
-def _render_chart_artifact_html(artifact: RenderedArtifact) -> str:
+def _render_chart_artifact_html(
+    artifact: RenderedArtifact,
+    reference_registry: ReferenceRegistry,
+) -> str:
     if artifact.path is None:
         raise RenderingError.from_message(
             "chart artifact is missing its rendered SVG path",
@@ -293,7 +317,9 @@ def _render_chart_artifact_html(artifact: RenderedArtifact) -> str:
             source_snippet=_source_snippet(artifact.block),
         ) from exc
 
-    caption = _render_caption_html(artifact, variant="chart")
+    caption = _render_caption_html(
+        artifact, variant="chart", registry=reference_registry
+    )
     return (
         f"<section {_artifact_attributes(artifact, 'mdcc-artifact mdcc-chart')}>"
         f"{svg}"
@@ -302,7 +328,10 @@ def _render_chart_artifact_html(artifact: RenderedArtifact) -> str:
     )
 
 
-def _render_table_artifact_html(artifact: RenderedArtifact) -> str:
+def _render_table_artifact_html(
+    artifact: RenderedArtifact,
+    reference_registry: ReferenceRegistry,
+) -> str:
     if artifact.html is None:
         raise RenderingError.from_message(
             "table artifact is missing its rendered HTML fragment",
@@ -310,7 +339,9 @@ def _render_table_artifact_html(artifact: RenderedArtifact) -> str:
             source_snippet=_source_snippet(artifact.block),
         )
 
-    caption = _render_caption_html(artifact, variant="table")
+    caption = _render_caption_html(
+        artifact, variant="table", registry=reference_registry
+    )
     return (
         f"<section {_artifact_attributes(artifact, 'mdcc-artifact mdcc-table')}>"
         f"{caption}"
@@ -332,14 +363,89 @@ def _artifact_attributes(artifact: RenderedArtifact, class_name: str) -> str:
     return " ".join(attributes)
 
 
-def _render_caption_html(artifact: RenderedArtifact, *, variant: str) -> str:
+def _render_caption_html(
+    artifact: RenderedArtifact,
+    *,
+    variant: str,
+    registry: ReferenceRegistry,
+) -> str:
     caption = artifact.block.metadata.caption
-    if caption is None:
+    label = artifact.block.metadata.label
+    prefix = registry[label].text if label is not None and label in registry else None
+
+    if prefix is not None and caption is not None:
+        rendered_caption = f"{prefix}. {caption}"
+    elif prefix is not None:
+        rendered_caption = prefix
+    elif caption is not None:
+        rendered_caption = caption
+    else:
         return ""
 
     return (
-        f'<p class="mdcc-caption mdcc-caption--{escape(variant)}">{escape(caption)}</p>'
+        f'<p class="mdcc-caption mdcc-caption--{escape(variant)}">'
+        f"{escape(rendered_caption)}"
+        "</p>"
     )
+
+
+def _build_reference_registry(document: AssembledDocument) -> ReferenceRegistry:
+    blocks = [
+        node.artifact.block for node in document.nodes if node.artifact is not None
+    ]
+    registry, duplicates = build_reference_registry(blocks)
+    if duplicates:
+        label, block = duplicates[0]
+        raise RenderingError.from_message(
+            f"duplicate label: {label}",
+            context=_context_for_block(block),
+            source_snippet=_source_snippet(block),
+        )
+    return registry
+
+
+def _replace_references_in_tokens(
+    tokens: list[dict[str, Any]],
+    node: MarkdownNode,
+    registry: ReferenceRegistry,
+) -> None:
+    for token in tokens:
+        if token.get("type") == "text" and "raw" in token:
+            token["raw"] = _replace_references_in_text(
+                token["raw"],
+                node,
+                registry,
+            )
+
+        children = token.get("children")
+        if isinstance(children, list):
+            _replace_references_in_tokens(children, node, registry)
+
+
+def _replace_references_in_text(
+    text: str,
+    node: MarkdownNode,
+    registry: ReferenceRegistry,
+) -> str:
+    def replace(match) -> str:
+        label = match.group("label")
+        reference = registry.get(label)
+        if reference is None:
+            raise RenderingError.from_message(
+                f"unresolved reference: {label}",
+                context=ErrorContext(
+                    source_path=node.location.source_path
+                    if node.location is not None
+                    else None,
+                    location=node.location,
+                ),
+                source_snippet=node.location.snippet
+                if node.location is not None
+                else None,
+            )
+        return reference.text
+
+    return REFERENCE_PATTERN.sub(replace, text)
 
 
 def _render_template(frontmatter: Frontmatter | None, body_fragments: list[str]) -> str:

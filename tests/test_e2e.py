@@ -237,6 +237,71 @@ def test_compile_rejects_phase_two_metadata_keys_during_validation(
     assert not (tmp_path / BUILD_DIR_NAME).exists()
 
 
+def test_compile_rejects_unresolved_cross_reference_during_validation(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        See @fig:not-found for details.
+
+        ```mdcc_chart caption="Revenue growth by region" label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+    output_path = tmp_path / "invalid-reference.pdf"
+
+    with pytest.raises(ValidationError) as exc_info:
+        run_compile(
+            CompileOptions(
+                input_path=source,
+                output_path=output_path,
+            )
+        )
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.stage.value == "validation"
+    assert diagnostic.message == "unresolved reference: fig:not-found"
+    assert not output_path.exists()
+    assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
+def test_compile_rejects_duplicate_cross_reference_labels_during_validation(
+    tmp_path: Path,
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_chart caption="Revenue growth by region" label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+
+        ```mdcc_chart caption="Revenue growth by product" label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+    output_path = tmp_path / "duplicate-labels.pdf"
+
+    with pytest.raises(ValidationError) as exc_info:
+        run_compile(
+            CompileOptions(
+                input_path=source,
+                output_path=output_path,
+            )
+        )
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.stage.value == "validation"
+    assert diagnostic.message == "duplicate label: fig:revenue-growth"
+    assert not output_path.exists()
+    assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
 def test_compile_does_not_reject_phase_two_metadata_key_in_parser(
     tmp_path: Path,
 ) -> None:

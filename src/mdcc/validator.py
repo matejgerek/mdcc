@@ -22,6 +22,7 @@ from mdcc.models import (
     ValidationResult,
     ValidationSeverity,
 )
+from mdcc.references import build_reference_registry, iter_reference_labels_in_markdown
 
 _SUPPORTED_CHART_TYPES = (
     alt.Chart,
@@ -132,6 +133,8 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     seen_node_ids: set[str] = set()
     executable_indices: list[int] = []
+    executable_blocks: list[ExecutableBlockNode] = []
+    markdown_nodes: list[MarkdownNode] = []
 
     for index, node in enumerate(document.nodes):
         if not isinstance(node, MarkdownNode | ExecutableBlockNode):
@@ -175,6 +178,7 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
             )
 
         if isinstance(node, MarkdownNode):
+            markdown_nodes.append(node)
             if node.text == "":
                 issues.append(
                     ValidationIssue(
@@ -198,8 +202,11 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
 
         issues.extend(_validate_block_metadata(node))
         executable_indices.append(node.block_index)
+        executable_blocks.append(node)
 
     issues.extend(_validate_executable_indices(document.nodes, executable_indices))
+    issues.extend(_validate_reference_labels(executable_blocks))
+    issues.extend(_validate_markdown_references(markdown_nodes, executable_blocks))
     return issues
 
 
@@ -293,6 +300,47 @@ def _validate_block_metadata(node: ExecutableBlockNode) -> list[ValidationIssue]
             caption=caption,
             label=label,
         )
+
+    return issues
+
+
+def _validate_reference_labels(
+    executable_blocks: list[ExecutableBlockNode],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    _, duplicates = build_reference_registry(executable_blocks)
+
+    for label, block in duplicates:
+        issues.append(
+            ValidationIssue(
+                severity=ValidationSeverity.ERROR,
+                code="block-label-duplicate",
+                message=f"duplicate label: {label}",
+                location=block.location,
+            )
+        )
+
+    return issues
+
+
+def _validate_markdown_references(
+    markdown_nodes: list[MarkdownNode],
+    executable_blocks: list[ExecutableBlockNode],
+) -> list[ValidationIssue]:
+    issues: list[ValidationIssue] = []
+    registry, _ = build_reference_registry(executable_blocks)
+
+    for node in markdown_nodes:
+        for label in iter_reference_labels_in_markdown(node.text):
+            if label not in registry:
+                issues.append(
+                    ValidationIssue(
+                        severity=ValidationSeverity.ERROR,
+                        code="markdown-reference-unresolved",
+                        message=f"unresolved reference: {label}",
+                        location=node.location,
+                    )
+                )
 
     return issues
 

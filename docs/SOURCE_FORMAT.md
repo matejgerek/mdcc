@@ -89,6 +89,24 @@ summary_df
 ```
 ````
 
+### 3.4 Cross References
+Markdown prose can reference labeled blocks with `@label` syntax.
+
+Examples:
+
+```markdown
+See @fig:revenue-region for details.
+Metrics are summarized in @tbl:regional-summary.
+```
+
+Resolution rules:
+- `@fig:...` references render as `Figure N`
+- `@tbl:...` references render as `Table N`
+- numbering is assigned per artifact type in document order
+- only labeled chart/table blocks are referenceable
+- unresolved references fail validation
+- duplicate labels fail validation
+
 ---
 
 ## 4. Last-Expression Output Rules

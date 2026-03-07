@@ -260,6 +260,122 @@ def test_validate_document_structure_rejects_invalid_label() -> None:
     )
 
 
+def test_validate_document_structure_rejects_duplicate_labels() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(("label", "fig:revenue-growth"),),
+                location=_location("report.md", 3, 5),
+            ),
+            ExecutableBlockNode(
+                node_id="block-0002",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=1,
+                raw_metadata=(("label", "fig:revenue-growth"),),
+                location=_location("report.md", 6, 8),
+            ),
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "block-label-duplicate" for issue in result.issues)
+    assert any(
+        issue.message == "duplicate label: fig:revenue-growth"
+        for issue in result.issues
+    )
+
+
+def test_validate_document_structure_rejects_unresolved_markdown_reference() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            MarkdownNode(
+                node_id="node-0001",
+                text="See @fig:not-found for details.\n",
+                location=_location("report.md", 1, 1),
+            ),
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(("label", "fig:revenue-growth"),),
+                location=_location("report.md", 3, 5),
+            ),
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    assert any(issue.code == "markdown-reference-unresolved" for issue in result.issues)
+    assert any(
+        issue.message == "unresolved reference: fig:not-found"
+        for issue in result.issues
+    )
+
+
+def test_validate_document_structure_accepts_resolved_markdown_reference() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            MarkdownNode(
+                node_id="node-0001",
+                text="See @fig:revenue-growth for details.\n",
+                location=_location("report.md", 1, 1),
+            ),
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(
+                    ("caption", "Revenue growth by region"),
+                    ("label", "fig:revenue-growth"),
+                ),
+                location=_location("report.md", 3, 5),
+            ),
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is True
+
+
+def test_validate_document_structure_ignores_references_inside_code_literals() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            MarkdownNode(
+                node_id="node-0001",
+                text="Use `@fig:not-found` literally.\n\n```text\n@tbl:not-found\n```\n",
+                location=_location("report.md", 1, 3),
+            ),
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="chart\n",
+                block_index=0,
+                raw_metadata=(("label", "fig:revenue-growth"),),
+                location=_location("report.md", 5, 7),
+            ),
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is True
+
+
 def _location(source_path: str, start_line: int, end_line: int) -> SourceLocation:
     return SourceLocation(
         source_path=Path(source_path),

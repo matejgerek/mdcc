@@ -474,6 +474,8 @@ def test_render_intermediate_document_renders_html_in_document_order(
     assert "<svg" in html
     assert "<table" in html
     assert "Bridge paragraph" in html
+    assert "Figure 1. Revenue by region" in html
+    assert "Table 1. Regional summary" in html
     assert 'id="fig:revenue-region"' in html
     assert 'data-label="fig:revenue-region"' in html
     assert 'id="tbl:regional-summary"' in html
@@ -485,6 +487,122 @@ def test_render_intermediate_document_renders_html_in_document_order(
     table_html_index = html.index("<table")
     assert chart_svg_index < chart_caption_index
     assert table_caption_index < table_html_index
+
+
+def test_render_intermediate_document_resolves_cross_references_in_markdown(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path)
+    intro = _markdown_node(
+        source_path=source,
+        node_id="node-0001",
+        line=1,
+        text="See @fig:revenue-region and @tbl:regional-summary for details.\n",
+    )
+    chart_block = _block(
+        source_path=source,
+        index=0,
+        block_type=BlockType.CHART,
+        code="chart",
+        metadata=BlockMetadata(
+            caption="Revenue by region",
+            label="fig:revenue-region",
+        ),
+    )
+    table_block = _block(
+        source_path=source,
+        index=1,
+        block_type=BlockType.TABLE,
+        code="frame",
+        metadata=BlockMetadata(
+            caption="Regional summary",
+            label="tbl:regional-summary",
+        ),
+    )
+    document = DocumentModel(
+        source_path=source,
+        nodes=[intro, chart_block, table_block],
+    )
+    chart = (
+        alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
+        .mark_line()
+        .encode(x="x", y="y")
+    )
+    chart_result = ChartResult(block=chart_block, value=chart, spec=chart.to_dict())
+    table_result = TableResult(
+        block=table_block,
+        value=pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]}),
+    )
+    build_context = BuildContext.create(source, keep=True)
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert "See Figure 1 and Table 1 for details." in intermediate.html
+    assert "@fig:revenue-region" not in intermediate.html
+    assert "@tbl:regional-summary" not in intermediate.html
+
+
+def test_render_intermediate_document_keeps_references_inside_code_literal(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path)
+    intro = _markdown_node(
+        source_path=source,
+        node_id="node-0001",
+        line=1,
+        text=(
+            "Use `@fig:revenue-region` literally.\n\n"
+            "```text\n@tbl:regional-summary\n```\n"
+        ),
+    )
+    chart_block = _block(
+        source_path=source,
+        index=0,
+        block_type=BlockType.CHART,
+        code="chart",
+        metadata=BlockMetadata(label="fig:revenue-region"),
+    )
+    table_block = _block(
+        source_path=source,
+        index=1,
+        block_type=BlockType.TABLE,
+        code="frame",
+        metadata=BlockMetadata(label="tbl:regional-summary"),
+    )
+    document = DocumentModel(
+        source_path=source,
+        nodes=[intro, chart_block, table_block],
+    )
+    chart = (
+        alt.Chart(pd.DataFrame({"x": [1, 2], "y": [3, 4]}))
+        .mark_line()
+        .encode(x="x", y="y")
+    )
+    chart_result = ChartResult(block=chart_block, value=chart, spec=chart.to_dict())
+    table_result = TableResult(
+        block=table_block,
+        value=pd.DataFrame({"region": ["na", "eu"], "revenue": [10, 20]}),
+    )
+    build_context = BuildContext.create(source, keep=True)
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert "<code>@fig:revenue-region</code>" in intermediate.html
+    assert '<pre><code class="language-text">@tbl:regional-summary' in intermediate.html
 
 
 def test_render_intermediate_document_inserts_frontmatter_metadata(

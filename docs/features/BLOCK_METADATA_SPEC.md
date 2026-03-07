@@ -1,7 +1,7 @@
 # Block Metadata — Technical Specification
 
 ## Status
-**PLANNED**
+**PHASE 1 DONE**
 
 This document defines the proposed block metadata extension for `mdcc`.
 It is intentionally scoped as a follow-up spec to the MVP and is designed to fit the existing architecture, parsing model, and agent-first principles.
