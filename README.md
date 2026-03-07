@@ -68,6 +68,12 @@ mdcc compile <input_file> [output_file] [OPTIONS]
 
 If `output_file` is omitted, the PDF is written next to the input file (e.g. `report.md` → `report.pdf`).
 
+For a fast pre-execution document check, use:
+
+```bash
+mdcc validate <input_file>
+```
+
 ### Options
 
 | Option | Description |

@@ -302,6 +302,36 @@ def test_compile_rejects_duplicate_cross_reference_labels_during_validation(
     assert not (tmp_path / BUILD_DIR_NAME).exists()
 
 
+def test_compile_rejects_import_policy_during_validation(tmp_path: Path) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        import os
+        pd.DataFrame({"cwd": [os.getcwd()]})
+        ```
+        """,
+    )
+    output_path = tmp_path / "import-policy.pdf"
+
+    with pytest.raises(ValidationError) as exc_info:
+        run_compile(
+            CompileOptions(
+                input_path=source,
+                output_path=output_path,
+            )
+        )
+
+    diagnostic = exc_info.value.diagnostic
+    assert diagnostic.stage.value == "validation"
+    assert diagnostic.message == "user imports are not allowed in executable blocks"
+    assert diagnostic.block_id == "block-0001"
+    assert diagnostic.block_index == 0
+    assert diagnostic.source_snippet == "import os"
+    assert not output_path.exists()
+    assert not (tmp_path / BUILD_DIR_NAME).exists()
+
+
 def test_compile_does_not_reject_phase_two_metadata_key_in_parser(
     tmp_path: Path,
 ) -> None:

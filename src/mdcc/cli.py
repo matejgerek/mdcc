@@ -1,7 +1,7 @@
 """CLI entrypoint for the mdcc executable report compiler.
 
-Provides the ``mdcc compile`` command that drives the full compilation
-pipeline from a single markdown source file to a PDF.
+Provides the ``mdcc compile`` and ``mdcc validate`` commands for full
+compilation and pre-execution document validation.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import typer
 from mdcc import __version__
 from mdcc.errors import MdccError, format_diagnostic, format_unexpected_error
 from mdcc.compile import CompileOptions, compile as run_compile
+from mdcc.validate import format_validation_report, validate_source_file
 
 # ---------------------------------------------------------------------------
 # App setup
@@ -54,8 +55,21 @@ def _main(
 
 
 # ---------------------------------------------------------------------------
-# compile command
+# shared CLI argument builders
 # ---------------------------------------------------------------------------
+
+
+InputFileArgument = Annotated[
+    Path,
+    typer.Argument(
+        help="Path to the source markdown file.",
+        exists=True,
+        file_okay=True,
+        dir_okay=False,
+        readable=True,
+        resolve_path=True,
+    ),
+]
 
 
 def _resolve_output_path(input_path: Path, output: Path | None) -> Path:
@@ -65,19 +79,14 @@ def _resolve_output_path(input_path: Path, output: Path | None) -> Path:
     return input_path.with_suffix(".pdf")
 
 
+# ---------------------------------------------------------------------------
+# compile command
+# ---------------------------------------------------------------------------
+
+
 @app.command()
 def compile(
-    input_file: Annotated[
-        Path,
-        typer.Argument(
-            help="Path to the source markdown file.",
-            exists=True,
-            file_okay=True,
-            dir_okay=False,
-            readable=True,
-            resolve_path=True,
-        ),
-    ],
+    input_file: InputFileArgument,
     output_file: Annotated[
         Optional[Path],
         typer.Argument(
@@ -132,6 +141,32 @@ def compile(
 
     if verbose:
         typer.echo(f"✓ compiled {input_file.name} → {resolved_output}")
+
+
+# ---------------------------------------------------------------------------
+# validate command
+# ---------------------------------------------------------------------------
+
+
+@app.command()
+def validate(input_file: InputFileArgument) -> None:
+    """Validate a markdown source file without executing blocks."""
+    try:
+        document, result = validate_source_file(input_file)
+    except MdccError as exc:
+        _report_mdcc_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        _report_unexpected_error(exc, verbose=False)
+        raise typer.Exit(code=1) from exc
+
+    report = format_validation_report(document, result)
+    if result.ok:
+        typer.echo(report)
+        return
+
+    typer.echo(report, err=True)
+    raise typer.Exit(code=1)
 
 
 # ---------------------------------------------------------------------------

@@ -260,6 +260,89 @@ def test_validate_document_structure_rejects_invalid_label() -> None:
     )
 
 
+def test_validate_document_structure_rejects_invalid_python_syntax() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.TABLE,
+                code="if True print('x')\n",
+                block_index=0,
+                location=_location("report.md", 3, 5),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    issue = next(
+        issue for issue in result.issues if issue.code == "block-code-syntax-invalid"
+    )
+    assert issue.message == "executable block contains invalid Python syntax"
+    assert issue.location is not None
+    assert issue.location.span is not None
+    assert issue.location.span.start.line == 4
+    assert issue.location.snippet == "if True print('x')"
+
+
+def test_validate_document_structure_rejects_import_statements() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code="x = 1\nimport os\nx\n",
+                block_index=0,
+                location=_location("report.md", 3, 7),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    issue = next(
+        issue for issue in result.issues if issue.code == "block-import-disallowed"
+    )
+    assert issue.message == "user imports are not allowed in executable blocks"
+    assert issue.location is not None
+    assert issue.location.span is not None
+    assert issue.location.span.start.line == 5
+    assert issue.location.snippet == "import os"
+
+
+def test_validate_document_structure_rejects_dynamic_import_calls() -> None:
+    document = DocumentModel(
+        source_path=Path("report.md"),
+        nodes=[
+            ExecutableBlockNode(
+                node_id="block-0001",
+                block_type=BlockType.CHART,
+                code='module = __import__("os")\nmodule\n',
+                block_index=0,
+                location=_location("report.md", 3, 6),
+            )
+        ],
+    )
+
+    result = validate_document_structure(document)
+
+    assert result.ok is False
+    issue = next(
+        issue
+        for issue in result.issues
+        if issue.code == "block-dynamic-import-disallowed"
+    )
+    assert issue.message == "dynamic imports are not allowed in executable blocks"
+    assert issue.location is not None
+    assert issue.location.span is not None
+    assert issue.location.span.start.line == 4
+    assert issue.location.snippet == 'module = __import__("os")'
+
+
 def test_validate_document_structure_rejects_duplicate_labels() -> None:
     document = DocumentModel(
         source_path=Path("report.md"),

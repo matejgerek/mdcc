@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from collections.abc import Iterable
 import re
 
@@ -16,6 +17,9 @@ from mdcc.models import (
     ExecutableBlockNode,
     Frontmatter,
     MarkdownNode,
+    SourceLocation,
+    SourcePosition,
+    SourceSpan,
     TableResult,
     TypedBlockResult,
     ValidationIssue,
@@ -201,6 +205,7 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
             )
 
         issues.extend(_validate_block_metadata(node))
+        issues.extend(validate_executable_block_runtime_policy(node))
         executable_indices.append(node.block_index)
         executable_blocks.append(node)
 
@@ -208,6 +213,74 @@ def _validate_nodes(document: DocumentModel) -> list[ValidationIssue]:
     issues.extend(_validate_reference_labels(executable_blocks))
     issues.extend(_validate_markdown_references(markdown_nodes, executable_blocks))
     return issues
+
+
+def validate_executable_block_runtime_policy(
+    block: ExecutableBlockNode,
+) -> list[ValidationIssue]:
+    try:
+        tree = ast.parse(block.code)
+    except SyntaxError as exc:
+        return [
+            ValidationIssue(
+                severity=ValidationSeverity.ERROR,
+                code="block-code-syntax-invalid",
+                message="executable block contains invalid Python syntax",
+                location=_syntax_error_location(block, exc),
+            )
+        ]
+
+    issues: list[ValidationIssue] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            issues.append(
+                ValidationIssue(
+                    severity=ValidationSeverity.ERROR,
+                    code="block-import-disallowed",
+                    message="user imports are not allowed in executable blocks",
+                    location=_node_location(block, node),
+                )
+            )
+
+        if _is_dynamic_import_call(node):
+            issues.append(
+                ValidationIssue(
+                    severity=ValidationSeverity.ERROR,
+                    code="block-dynamic-import-disallowed",
+                    message="dynamic imports are not allowed in executable blocks",
+                    location=_node_location(block, node),
+                )
+            )
+
+    return issues
+
+
+def assert_valid_executable_block_runtime_policy(
+    block: ExecutableBlockNode,
+) -> None:
+    issues = validate_executable_block_runtime_policy(block)
+    if not issues:
+        return
+
+    primary_issue = issues[0]
+    raise ValidationError.from_message(
+        primary_issue.message,
+        context=ErrorContext(
+            source_path=primary_issue.location.source_path
+            if primary_issue.location is not None
+            else (block.location.source_path if block.location is not None else None),
+            block_id=block.node_id,
+            block_type=block.block_type,
+            block_index=block.block_index,
+            location=primary_issue.location or block.location,
+        ),
+        source_snippet=(
+            primary_issue.location.snippet
+            if primary_issue.location is not None
+            else (block.location.snippet if block.location is not None else None)
+        ),
+        exception_message=primary_issue.code,
+    )
 
 
 def _validate_executable_indices(
@@ -353,18 +426,60 @@ def _build_validation_error(
         issue for issue in issues if issue.severity is ValidationSeverity.ERROR
     ]
     primary_issue = error_issues[0] if error_issues else issues[0]
+    matching_block = _find_executable_block_for_issue(document, primary_issue)
     return ValidationError.from_message(
         primary_issue.message,
         context=ErrorContext(
-            source_path=document.source_path,
+            source_path=primary_issue.location.source_path
+            if primary_issue.location is not None
+            else document.source_path,
+            block_id=matching_block.node_id if matching_block is not None else None,
+            block_type=matching_block.block_type
+            if matching_block is not None
+            else None,
+            block_index=matching_block.block_index
+            if matching_block is not None
+            else None,
             location=primary_issue.location,
         ),
+        source_snippet=primary_issue.location.snippet
+        if primary_issue.location is not None
+        else None,
         exception_message=_format_issue_summary(issues),
     )
 
 
 def _format_issue_summary(issues: list[ValidationIssue]) -> str:
     return "; ".join(f"{issue.code}: {issue.message}" for issue in issues)
+
+
+def _find_executable_block_for_issue(
+    document: DocumentModel,
+    issue: ValidationIssue,
+) -> ExecutableBlockNode | None:
+    if issue.location is None or issue.location.span is None:
+        return None
+
+    issue_start = issue.location.span.start
+    issue_end = issue.location.span.end
+
+    for node in document.nodes:
+        if not isinstance(node, ExecutableBlockNode):
+            continue
+        if node.location is None or node.location.span is None:
+            continue
+        if node.location.source_path != issue.location.source_path:
+            continue
+
+        block_start = node.location.span.start
+        block_end = node.location.span.end
+        if (block_start.line, block_start.column) <= (
+            issue_start.line,
+            issue_start.column,
+        ) and (issue_end.line, issue_end.column) <= (block_end.line, block_end.column):
+            return node
+
+    return None
 
 
 def _typed_result_issue(result: BlockExecutionResult) -> ValidationIssue | None:
@@ -474,9 +589,116 @@ def _is_missing_final_expression(result: BlockExecutionResult) -> bool:
     return result.raw_value is None and result.raw_type_name is None
 
 
+def _is_dynamic_import_call(node: ast.AST) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    if isinstance(node.func, ast.Name):
+        return node.func.id == "__import__"
+    if isinstance(node.func, ast.Attribute):
+        return node.func.attr == "__import__"
+    return False
+
+
+def _node_location(
+    block: ExecutableBlockNode,
+    node: ast.AST,
+) -> SourceLocation | None:
+    if block.location is None:
+        return None
+
+    start_line = getattr(node, "lineno", None)
+    end_line = getattr(node, "end_lineno", None)
+    start_col = getattr(node, "col_offset", None)
+    end_col = getattr(node, "end_col_offset", None)
+    base_line = _block_code_start_line(block)
+    if (
+        base_line is None
+        or start_line is None
+        or end_line is None
+        or start_col is None
+        or end_col is None
+    ):
+        return block.location
+
+    return SourceLocation(
+        source_path=block.location.source_path,
+        span=SourceSpan(
+            start=SourcePosition(
+                line=base_line + start_line - 1,
+                column=start_col + 1,
+            ),
+            end=SourcePosition(
+                line=base_line + end_line - 1,
+                column=max(1, end_col),
+            ),
+        ),
+        snippet=_source_snippet_for_node(block, node),
+    )
+
+
+def _syntax_error_location(
+    block: ExecutableBlockNode,
+    exc: SyntaxError,
+) -> SourceLocation | None:
+    if block.location is None or exc.lineno is None:
+        return block.location
+
+    base_line = _block_code_start_line(block)
+    if base_line is None:
+        return block.location
+
+    column = max(1, exc.offset or 1)
+    return SourceLocation(
+        source_path=block.location.source_path,
+        span=SourceSpan(
+            start=SourcePosition(
+                line=base_line + exc.lineno - 1,
+                column=column,
+            ),
+            end=SourcePosition(
+                line=base_line + exc.lineno - 1,
+                column=column,
+            ),
+        ),
+        snippet=_source_snippet_for_syntax_error(block, exc),
+    )
+
+
+def _source_snippet_for_node(block: ExecutableBlockNode, node: ast.AST) -> str | None:
+    lineno = getattr(node, "lineno", None)
+    if lineno is None:
+        return None
+
+    lines = block.code.splitlines()
+    if 1 <= lineno <= len(lines):
+        return lines[lineno - 1]
+    return None
+
+
+def _source_snippet_for_syntax_error(
+    block: ExecutableBlockNode,
+    exc: SyntaxError,
+) -> str | None:
+    if exc.lineno is None:
+        return None
+
+    lines = block.code.splitlines()
+    if 1 <= exc.lineno <= len(lines):
+        return lines[exc.lineno - 1]
+    return exc.text.strip() if exc.text is not None else None
+
+
+def _block_code_start_line(block: ExecutableBlockNode) -> int | None:
+    if block.location is None or block.location.span is None:
+        return None
+    return block.location.span.start.line + 1
+
+
 __all__ = [
     "assert_valid_document_structure",
+    "assert_valid_executable_block_runtime_policy",
     "assert_valid_typed_result",
     "validate_document_structure",
+    "validate_executable_block_runtime_policy",
     "validate_typed_result",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import textwrap
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -20,6 +21,12 @@ from mdcc.models import (
     SourcePosition,
     SourceSpan,
 )
+
+
+def _write_source(tmp_path: Path, body: str) -> Path:
+    source = tmp_path / "report.md"
+    source.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
+    return source
 
 
 # ---------------------------------------------------------------------------
@@ -40,11 +47,25 @@ def test_compile_requires_input_argument(cli_runner: CliRunner) -> None:
     assert result.exit_code != 0
 
 
+def test_validate_requires_input_argument(cli_runner: CliRunner) -> None:
+    """``mdcc validate`` without an input file should fail."""
+    result = cli_runner.invoke(app, ["validate"])
+    assert result.exit_code != 0
+
+
 def test_compile_rejects_nonexistent_input(
     cli_runner: CliRunner, tmp_path: Path
 ) -> None:
     """Providing a file that does not exist should fail with a clear error."""
     result = cli_runner.invoke(app, ["compile", str(tmp_path / "missing.md")])
+    assert result.exit_code != 0
+
+
+def test_validate_rejects_nonexistent_input(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    """Providing a missing file to ``mdcc validate`` should fail."""
+    result = cli_runner.invoke(app, ["validate", str(tmp_path / "missing.md")])
     assert result.exit_code != 0
 
 
@@ -256,3 +277,214 @@ def test_compile_verbose_surfaces_unexpected_error_stage(
 
     assert result.exit_code == 1
     assert "stage: internal" in result.output
+
+
+# ---------------------------------------------------------------------------
+# validate command behavior
+# ---------------------------------------------------------------------------
+
+
+def test_validate_reports_successful_document(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: Revenue Report
+        ---
+
+        Intro text.
+
+        ```mdcc_chart caption="Revenue by region" label="fig:revenue-region"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+
+        ```mdcc_table label="tbl:regional-summary"
+        pd.DataFrame({"region": ["na"], "revenue": [10]})
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 0
+    assert "Validation successful" in result.output
+    assert "Blocks discovered:" in result.output
+    assert "1. mdcc_chart (line 4)" in result.output
+    assert "2. mdcc_table (line 9)" in result.output
+    assert "Labels:" in result.output
+    assert "- fig:revenue-region" in result.output
+    assert "- tbl:regional-summary" in result.output
+
+
+def test_validate_reports_warnings_without_failing(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: Revenue Report
+        team: finance
+        ---
+
+        # Intro
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 0
+    assert "Validation successful" in result.output
+    assert "Warnings:" in result.output
+    assert "unknown frontmatter fields were preserved in extra" in result.output
+    assert "Blocks discovered:\n- none" in result.output
+    assert "Labels:\n- none" in result.output
+
+
+def test_validate_reports_duplicate_labels(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_chart label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+
+        ```mdcc_chart label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q2"], "revenue": [12]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "Validation failed" in result.output
+    assert "Errors:" in result.output
+    assert "duplicate label: fig:revenue-growth" in result.output
+    assert "lines 6:1-9:3" in result.output
+    assert "Blocks discovered:" not in result.output
+
+
+def test_validate_reports_unresolved_references(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        See @fig:not-found for details.
+
+        ```mdcc_chart label="fig:revenue-growth"
+        frame = pd.DataFrame({"quarter": ["Q1"], "revenue": [10]})
+        alt.Chart(frame).mark_bar().encode(x="quarter", y="revenue")
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "unresolved reference: fig:not-found" in result.output
+    assert "lines 1:1-2:1" in result.output
+
+
+def test_validate_reports_invalid_python_syntax(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        if True print("boom")
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "executable block contains invalid Python syntax" in result.output
+    assert "line 2:9" in result.output
+
+
+def test_validate_reports_import_policy_violation(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        import os
+        pd.DataFrame({"cwd": [os.getcwd()]})
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "user imports are not allowed in executable blocks" in result.output
+    assert "line 2:1-9" in result.output
+
+
+def test_validate_reports_dynamic_import_policy_violation(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        module = __import__("os")
+        pd.DataFrame({"module": [module.__name__]})
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "dynamic imports are not allowed in executable blocks" in result.output
+    assert "line 2:10-25" in result.output
+
+
+def test_validate_surfaces_parse_errors_with_existing_diagnostics(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ---
+        title: broken
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "error: frontmatter opening delimiter is not closed" in result.output
+    assert "stage: parse" in result.output
+
+
+def test_validate_surfaces_malformed_block_headers_with_existing_diagnostics(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_chart caption="Revenue"label="fig:revenue"
+        chart
+        ```
+        """,
+    )
+
+    result = cli_runner.invoke(app, ["validate", str(source)])
+
+    assert result.exit_code == 1
+    assert "error: malformed executable block metadata attributes" in result.output
+    assert "stage: parse" in result.output

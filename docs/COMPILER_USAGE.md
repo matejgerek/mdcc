@@ -23,6 +23,14 @@ mdcc compile <input_file> [output_file] [OPTIONS]
 *   `--keep-build-dir`: Prevents the compiler from deleting the intermediate `.mdcc_build` directory post-completion. This is extremely useful for manual debugging.
 *   `--verbose`, `-v`: Elevates diagnostic output detail if the compilation fails. It will also display a success message when finishing gracefully.
 
+For a dry-run validation pass that stops before payload generation, execution, rendering, and PDF output, use:
+
+```bash
+mdcc validate <input_file>
+```
+
+This command reads, parses, and validates the document, then prints a human-readable validation report. It exits `0` when the document is valid and `1` when read, parse, or validation errors are detected.
+
 ---
 
 ## 2. High-Level Compiler Stages
