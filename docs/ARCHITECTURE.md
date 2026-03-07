@@ -42,28 +42,28 @@ mdcc/
 └── src/
     └── mdcc/
         ├── __init__.py        # Package root and version
-        ├── cli.py             # CLI entrypoints (Typer) [T06]
-        ├── compile.py          # End-to-End Compiler Orchestrator [T20]
-        ├── models.py          # Core domain data models (Pydantic v2) [T02]
-        ├── errors.py          # Diagnostics model and typed exceptions [T18, T19]
-        ├── reader.py          # Source reader & frontmatter extraction [T03]
-        ├── parser.py          # Markdown & Executable block parsing (Mistune) [T04]
-        ├── validator.py       # Structural/Result validation logic [T05, T11]
-        ├── pdf.py             # Final PDF Generation (WeasyPrint) [T17]
+        ├── cli.py             # CLI entrypoints (Typer)
+        ├── compile.py          # End-to-End Compiler Orchestrator
+        ├── models.py          # Core domain data models (Pydantic v2)
+        ├── errors.py          # Diagnostics model and typed exceptions
+        ├── reader.py          # Source reader & frontmatter extraction
+        ├── parser.py          # Markdown & Executable block parsing (Mistune)
+        ├── validator.py       # Structural/Result validation logic
+        ├── pdf.py             # Final PDF Generation (WeasyPrint)
         │
-        ├── executor/          # Isolated Block Execution Module [T07, T08, T09, T10]
+        ├── executor/          # Isolated Block Execution Module
         │   ├── __init__.py
         │   ├── runner.py      # subprocess orchestration and execution engine
         │   ├── payload.py     # block payload builder logic
         │   └── prelude.py     # fixed runtime environment injected into blocks
         │
-        ├── renderers/         # Document and Artifact Rendering Module [T12, T13, T15, T16]
+        ├── renderers/         # Document and Artifact Rendering Module
         │   ├── __init__.py
         │   ├── chart.py       # Altair -> static image implementation
         │   ├── table.py       # pandas DataFrame -> HTML table implementation
         │   └── document.py    # narrative/artifact assembly (Jinja2)
         │
-        └── utils/             # Helper utilities [T14]
+        └── utils/             # Helper utilities
             ├── __init__.py
             └── workspace.py   # Temporary build directory & asset management
 ```
