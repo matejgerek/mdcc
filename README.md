@@ -154,3 +154,4 @@ Failure categories: `READ_ERROR`, `PARSE_ERROR`, `VALIDATION_ERROR`, `EXECUTION_
 - [`docs/COMPILER_USAGE.md`](docs/COMPILER_USAGE.md) — compiler stages, options, and failure interpretation
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — internal architecture and module structure
 - [`docs/SPEC.md`](docs/SPEC.md) — technical specification
+- [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md) — detailed error category reference
