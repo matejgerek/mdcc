@@ -24,6 +24,8 @@ _PAYLOADS_DIR = "payloads"
 _LOGS_DIR = "logs"
 _RESULTS_DIR = "results"
 _DEPENDENCIES_DIR = "dependencies"
+_DATASET_MANIFESTS_DIR = "dataset_manifests"
+_DATASET_PAYLOADS_DIR = "dataset_payloads"
 
 # Default name of the build directory placed next to the source file.
 BUILD_DIR_NAME = ".mdcc_build"
@@ -78,6 +80,8 @@ class BuildContext:
             _LOGS_DIR,
             _RESULTS_DIR,
             _DEPENDENCIES_DIR,
+            _DATASET_MANIFESTS_DIR,
+            _DATASET_PAYLOADS_DIR,
         ):
             (build_dir / sub).mkdir(exist_ok=True)
 
@@ -121,6 +125,16 @@ class BuildContext:
     def dependencies_dir(self) -> Path:
         """Directory for block execution dependency manifests."""
         return self._build_dir / _DEPENDENCIES_DIR
+
+    @property
+    def dataset_manifests_dir(self) -> Path:
+        """Directory for block execution dataset capture manifests."""
+        return self._build_dir / _DATASET_MANIFESTS_DIR
+
+    @property
+    def dataset_payloads_dir(self) -> Path:
+        """Directory for temporary dataset payload files."""
+        return self._build_dir / _DATASET_PAYLOADS_DIR
 
     # ------------------------------------------------------------------
     # Path helpers — deterministic file names per block index
@@ -185,6 +199,16 @@ class BuildContext:
             File extension including the leading dot (default ``".json"``).
         """
         return self.results_dir / f"result_{block_index:03d}{ext}"
+
+    def dataset_manifest_path(self, block_index: int, ext: str = ".json") -> Path:
+        """Return the target path for a dataset capture manifest file."""
+        return self.dataset_manifests_dir / f"dataset_manifest_{block_index:03d}{ext}"
+
+    def dataset_payload_dir(self, block_index: int) -> Path:
+        """Return the per-block directory for captured dataset payloads."""
+        path = self.dataset_payloads_dir / f"block_{block_index:03d}"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
 
     # ------------------------------------------------------------------
     # Context-manager protocol

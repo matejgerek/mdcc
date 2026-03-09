@@ -42,6 +42,9 @@ class DiagnosticStage(StrEnum):
     TIMEOUT = "timeout"
     RENDERING = "rendering"
     PDF = "pdf"
+    BUNDLE = "bundle"
+    INSPECTION = "inspection"
+    SQL = "sql"
 
 
 class DiagnosticCategory(StrEnum):
@@ -52,11 +55,40 @@ class DiagnosticCategory(StrEnum):
     RENDERING_ERROR = "rendering_error"
     PDF_ERROR = "pdf_error"
     READ_ERROR = "read_error"
+    BUNDLE_ERROR = "bundle_error"
+    BUNDLE_VALIDATION_ERROR = "bundle_validation_error"
+    INSPECTION_ERROR = "inspection_error"
+    SQL_ERROR = "sql_error"
 
 
 class ArtifactKind(StrEnum):
     CHART = "chart"
     TABLE = "table"
+
+
+class BundleDatasetRole(StrEnum):
+    INPUT = "input"
+    PRIMARY = "primary"
+    SUPPORTING = "supporting"
+
+
+class DatasetSourceKind(StrEnum):
+    READ_CSV = "read_csv"
+    READ_JSON = "read_json"
+    READ_EXCEL = "read_excel"
+    READ_PARQUET = "read_parquet"
+    RENDER_PRIMARY = "render_primary"
+    MANUAL_PERSIST = "manual_persist"
+
+
+class BundleOutputKind(StrEnum):
+    CHART_SPEC = "chart_spec"
+    TABLE_FRAME = "table_frame"
+
+
+class BundleOutputFormat(StrEnum):
+    VEGA_JSON = "vega_json"
+    PARQUET = "parquet"
 
 
 class SourcePosition(BaseModel):
@@ -167,10 +199,13 @@ class BlockExecutionResult(BaseModel):
 
 class ExecutionPayload(BaseModel):
     block: ExecutableBlockNode
+    capture_datasets: bool = False
     script_text: str
     script_path: Path
     result_path: Path
     dependency_path: Path
+    dataset_manifest_path: Path
+    dataset_payloads_dir: Path
     log_path: Path
     execution_cwd: Path
 
@@ -281,6 +316,99 @@ class Diagnostic(BaseModel):
     duration_ms: float | None = Field(default=None, ge=0)
 
 
+class RuntimeDatasetCapture(BaseModel):
+    ordinal: int = Field(ge=0)
+    source_kind: DatasetSourceKind
+    source_path: str | None = None
+    payload_path: Path
+
+
+class BundleDatasetColumn(BaseModel):
+    ordinal: int = Field(ge=0)
+    column_name: str
+    logical_type: str
+    nullable: bool
+
+
+class BundleDatasetRecord(BaseModel):
+    dataset_id: str
+    name: str
+    format: str
+    role_summary: str
+    row_count: int = Field(ge=0)
+    column_count: int = Field(ge=0)
+    source_kind: DatasetSourceKind
+    payload_id: str
+    fingerprint: str
+    columns: list[BundleDatasetColumn] = Field(default_factory=list)
+
+
+class BundleBlockDatasetLink(BaseModel):
+    block_id: str
+    dataset_id: str
+    role: BundleDatasetRole
+
+
+class BundleBlockRecord(BaseModel):
+    block_id: str
+    block_type: BlockType
+    source_start_line: int = Field(ge=1)
+    source_end_line: int = Field(ge=1)
+    label: str | None = None
+    caption: str | None = None
+
+
+class BundleDocumentRecord(BaseModel):
+    document_id: str
+    title: str | None = None
+    source_text: str
+
+
+class BundleMetaRecord(BaseModel):
+    format_version: str
+    created_at: str
+    mdcc_version: str
+    source_filename: str | None = None
+    source_sha256: str
+
+
+class BundlePayloadRecord(BaseModel):
+    payload_id: str
+    blob_data: bytes
+
+
+class BundleBlockOutputRecord(BaseModel):
+    block_id: str
+    output_kind: BundleOutputKind
+    format: BundleOutputFormat
+    payload_id: str
+
+
+class BundleOutputPayloadRecord(BaseModel):
+    payload_id: str
+    blob_data: bytes
+
+
+class BundleModel(BaseModel):
+    meta: BundleMetaRecord
+    document: BundleDocumentRecord
+    blocks: list[BundleBlockRecord] = Field(default_factory=list)
+    datasets: list[BundleDatasetRecord] = Field(default_factory=list)
+    block_datasets: list[BundleBlockDatasetLink] = Field(default_factory=list)
+    dataset_payloads: list[BundlePayloadRecord] = Field(default_factory=list)
+    block_outputs: list[BundleBlockOutputRecord] = Field(default_factory=list)
+    output_payloads: list[BundleOutputPayloadRecord] = Field(default_factory=list)
+
+
+class CompiledBlockRecord(BaseModel):
+    payload: ExecutionPayload
+    execution_result: BlockExecutionResult
+    typed_result: TypedBlockResult
+    dependencies: list[Any] = Field(default_factory=list)
+    dataset_captures: list[RuntimeDatasetCapture] = Field(default_factory=list)
+    rendered_artifact: RenderedArtifact | None = None
+
+
 __all__ = [
     "ArtifactKind",
     "AssembledDocument",
@@ -288,11 +416,26 @@ __all__ = [
     "BaseNode",
     "BlockMetadata",
     "BlockExecutionResult",
+    "BundleBlockOutputRecord",
+    "BundleBlockDatasetLink",
+    "BundleBlockRecord",
+    "BundleDatasetColumn",
+    "BundleDatasetRecord",
+    "BundleDatasetRole",
+    "BundleDocumentRecord",
+    "BundleMetaRecord",
+    "BundleModel",
+    "BundleOutputFormat",
+    "BundleOutputKind",
+    "BundleOutputPayloadRecord",
+    "BundlePayloadRecord",
     "BlockType",
     "ChartResult",
+    "CompiledBlockRecord",
     "Diagnostic",
     "DiagnosticCategory",
     "DiagnosticStage",
+    "DatasetSourceKind",
     "DocumentModel",
     "DocumentNode",
     "ExecutionPayload",
@@ -305,6 +448,7 @@ __all__ = [
     "MarkdownNode",
     "NodeKind",
     "RenderedArtifact",
+    "RuntimeDatasetCapture",
     "SourceLocation",
     "SourceDocumentInput",
     "SourcePosition",

@@ -21,27 +21,37 @@ from mdcc.validator import assert_valid_executable_block_runtime_policy
 def build_execution_payload(
     block: ExecutableBlockNode,
     build_context: BuildContext,
+    *,
+    capture_datasets: bool = False,
 ) -> ExecutionPayload:
     """Create and persist the execution script for a single block."""
     assert_valid_executable_block_runtime_policy(block)
     script_path = build_context.payload_path(block.block_index)
     result_path = build_context.result_path(block.block_index)
     dependency_path = build_context.dependency_path(block.block_index)
+    dataset_manifest_path = build_context.dataset_manifest_path(block.block_index)
+    dataset_payloads_dir = build_context.dataset_payload_dir(block.block_index)
     log_path = build_context.log_path(block.block_index)
     execution_cwd = build_context.build_dir.parent
     script_text = _build_payload_script(
         block=block,
         result_path=result_path,
         dependency_path=dependency_path,
+        dataset_manifest_path=dataset_manifest_path,
+        dataset_payloads_dir=dataset_payloads_dir,
+        capture_datasets=capture_datasets,
     )
     script_path.write_text(script_text, encoding="utf-8")
 
     return ExecutionPayload(
         block=block,
+        capture_datasets=capture_datasets,
         script_text=script_text,
         script_path=script_path,
         result_path=result_path,
         dependency_path=dependency_path,
+        dataset_manifest_path=dataset_manifest_path,
+        dataset_payloads_dir=dataset_payloads_dir,
         log_path=log_path,
         execution_cwd=execution_cwd,
     )
@@ -50,10 +60,16 @@ def build_execution_payload(
 def build_execution_payloads(
     document: DocumentModel,
     build_context: BuildContext,
+    *,
+    capture_datasets: bool = False,
 ) -> list[ExecutionPayload]:
     """Create payloads for executable blocks in document order."""
     return [
-        build_execution_payload(node, build_context)
+        build_execution_payload(
+            node,
+            build_context,
+            capture_datasets=capture_datasets,
+        )
         for node in document.nodes
         if isinstance(node, ExecutableBlockNode)
     ]
@@ -69,9 +85,18 @@ def _build_payload_script(
     block: ExecutableBlockNode,
     result_path: Path,
     dependency_path: Path,
+    dataset_manifest_path: Path,
+    dataset_payloads_dir: Path,
+    capture_datasets: bool,
 ) -> str:
     """Assemble the full execution script: prelude + user code + epilogue."""
-    prelude = build_runtime_prelude(result_path, dependency_path)
+    prelude = build_runtime_prelude(
+        result_path,
+        dependency_path,
+        dataset_manifest_path,
+        dataset_payloads_dir,
+        capture_datasets=capture_datasets,
+    )
     user_code, epilogue = _rewrite_last_expression(block.code)
     return f"{prelude}\n{user_code}\n{epilogue}"
 

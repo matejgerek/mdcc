@@ -8,6 +8,7 @@ import pytest
 from mdcc.errors import ExecutionError, TimeoutError, ValidationError
 from mdcc.executor.payload import build_execution_payload, build_execution_payloads
 from mdcc.executor.prelude import build_runtime_prelude
+from mdcc.executor.result import read_runtime_dataset_captures
 from mdcc.executor.runner import run_payload, run_payloads
 from mdcc.models import (
     BlockType,
@@ -61,6 +62,9 @@ def test_build_runtime_prelude_exposes_fixed_aliases(tmp_path: Path) -> None:
     prelude = build_runtime_prelude(
         tmp_path / "result_000.json",
         tmp_path / "dependency_000.json",
+        tmp_path / "dataset_manifest_000.json",
+        tmp_path / "datasets",
+        capture_datasets=False,
     )
 
     assert "import altair as alt" in prelude
@@ -68,6 +72,8 @@ def test_build_runtime_prelude_exposes_fixed_aliases(tmp_path: Path) -> None:
     assert "import pandas as pd" in prelude
     assert "MDCC_RESULT_PATH" in prelude
     assert "MDCC_DEPENDENCY_PATH" in prelude
+    assert "MDCC_DATASET_MANIFEST_PATH" in prelude
+    assert "MDCC_CAPTURE_DATASETS = False" in prelude
 
 
 def test_build_execution_payload_writes_deterministic_script_and_paths(
@@ -82,6 +88,8 @@ def test_build_execution_payload_writes_deterministic_script_and_paths(
     assert payload.script_path == build_context.payload_path(0)
     assert payload.result_path == build_context.result_path(0)
     assert payload.dependency_path == build_context.dependency_path(0)
+    assert payload.dataset_manifest_path == build_context.dataset_manifest_path(0)
+    assert payload.dataset_payloads_dir == build_context.dataset_payload_dir(0)
     assert payload.log_path == build_context.log_path(0)
     assert payload.execution_cwd == source.parent
     assert payload.script_path.read_text(encoding="utf-8") == payload.script_text
@@ -197,6 +205,58 @@ def test_run_payload_tracks_file_reads_as_dependencies(tmp_path: Path) -> None:
     assert data_path.resolve().as_posix() in payload.dependency_path.read_text(
         encoding="utf-8"
     )
+
+
+def test_run_payload_records_pandas_input_datasets(tmp_path: Path) -> None:
+    source = _source_file(tmp_path)
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("value\n1\n2\n", encoding="utf-8")
+    build_context = BuildContext.create(source, keep=True)
+    payload = build_execution_payload(
+        _block(
+            source_path=source,
+            index=0,
+            code=(
+                f'frame = pd.read_csv("{data_path.name}")\n'
+                "print(frame['value'].sum(), flush=True)\n"
+            ),
+        ),
+        build_context,
+        capture_datasets=True,
+    )
+
+    result = run_payload(payload, timeout_seconds=5.0)
+
+    assert result.status is ExecutionStatus.SUCCESS
+    captures = read_runtime_dataset_captures(payload.dataset_manifest_path)
+    assert len(captures) == 1
+    assert captures[0].source_kind.value == "read_csv"
+    assert captures[0].payload_path.exists()
+
+
+def test_run_payload_does_not_capture_pandas_input_datasets_by_default(
+    tmp_path: Path,
+) -> None:
+    source = _source_file(tmp_path)
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("value\n1\n2\n", encoding="utf-8")
+    build_context = BuildContext.create(source, keep=True)
+    payload = build_execution_payload(
+        _block(
+            source_path=source,
+            index=0,
+            code=(
+                f'frame = pd.read_csv("{data_path.name}")\n'
+                "print(frame['value'].sum(), flush=True)\n"
+            ),
+        ),
+        build_context,
+    )
+
+    result = run_payload(payload, timeout_seconds=5.0)
+
+    assert result.status is ExecutionStatus.SUCCESS
+    assert read_runtime_dataset_captures(payload.dataset_manifest_path) == []
 
 
 def test_run_payloads_executes_in_document_order(tmp_path: Path) -> None:

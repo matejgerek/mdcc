@@ -9,8 +9,12 @@ from unittest.mock import patch
 from typer.testing import CliRunner
 
 from mdcc import __version__
+from mdcc.bundle.commands import (
+    BundleCreateOptions,
+    create_bundle as real_create_bundle,
+)
 from mdcc.cli import app
-from mdcc.errors import MdccError
+from mdcc.errors import BundleError, ErrorContext, InspectionError, MdccError, ReadError
 from mdcc.compile import CompileOptions
 from mdcc.models import (
     BlockType,
@@ -504,3 +508,257 @@ def test_validate_surfaces_malformed_block_headers_with_existing_diagnostics(
     assert result.exit_code == 1
     assert "error: malformed executable block metadata attributes" in result.output
     assert "stage: parse" in result.output
+
+
+def test_bundle_create_generates_default_output_path(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    captured_options: list[BundleCreateOptions] = []
+
+    def _capture(options: BundleCreateOptions) -> None:
+        captured_options.append(options)
+
+    with patch("mdcc.cli.create_bundle", side_effect=_capture):
+        result = cli_runner.invoke(app, ["bundle", "create", str(tmp_source_file)])
+
+    assert result.exit_code == 0
+    assert len(captured_options) == 1
+    assert captured_options[0].output_path == tmp_source_file.with_suffix(".mdcx")
+
+
+def test_render_command_requires_output_option(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+
+    result = cli_runner.invoke(app, ["render", str(bundle_file)])
+
+    assert result.exit_code != 0
+
+
+def test_render_command_forwards_bundle_and_output_paths(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    output_file = tmp_path / "report.pdf"
+    captured_calls: list[tuple[Path, Path]] = []
+
+    def _capture(bundle_path: Path, output_path: Path) -> None:
+        captured_calls.append((bundle_path, output_path))
+
+    with patch("mdcc.cli.render_bundle_to_path", side_effect=_capture):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_file), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 0
+    assert captured_calls == [(bundle_file, output_file)]
+
+
+def test_render_command_surfaces_mdcc_error(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    output_file = tmp_path / "report.pdf"
+    error = BundleError.from_message(
+        "bundle does not include persisted render outputs",
+        context=ErrorContext(source_path=bundle_file),
+    )
+
+    with patch("mdcc.cli.render_bundle_to_path", side_effect=error):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_file), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 1
+    assert "bundle does not include persisted render outputs" in result.output
+    assert "stage: bundle" in result.output
+    assert f"file: {bundle_file}" in result.output
+
+
+def test_render_command_renders_pdf_from_bundle(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        pd.DataFrame({"value": [1]})
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+    output_file = tmp_path / "report.pdf"
+
+    def _capture_pdf(document, path):
+        path.write_bytes(b"%PDF-1.4")
+        return path
+
+    with patch("mdcc.bundle.render.generate_pdf", side_effect=_capture_pdf):
+        result = cli_runner.invoke(
+            app,
+            ["render", str(bundle_path), "--output", str(output_file)],
+        )
+
+    assert result.exit_code == 0
+    assert output_file.exists()
+    assert output_file.stat().st_size > 0
+
+
+def test_dataset_commands_round_trip_bundle(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        frame = pd.read_csv("data.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    list_result = cli_runner.invoke(app, ["dataset", "list", str(bundle_path)])
+    assert list_result.exit_code == 0
+    assert "ds_block_0001_primary" in list_result.output
+
+    show_result = cli_runner.invoke(
+        app,
+        ["dataset", "show", str(bundle_path), "--id", "dset_001"],
+    )
+    assert show_result.exit_code == 0
+    assert "role_summary: input,primary" in show_result.output
+
+    head_result = cli_runner.invoke(
+        app,
+        ["dataset", "head", str(bundle_path), "--id", "dset_001", "--rows", "1"],
+    )
+    assert head_result.exit_code == 0
+    assert "na" in head_result.output
+
+
+def test_sql_command_rejects_file_option(cli_runner: CliRunner, tmp_path: Path) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("not-a-bundle", encoding="utf-8")
+    query_file = tmp_path / "query.sql"
+    query_file.write_text("select 1", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app,
+        ["sql", str(bundle_file), "select 1", "--file", str(query_file)],
+    )
+
+    assert result.exit_code == 1
+    assert "SQL file input is not supported" in result.output
+
+
+def test_bundle_create_surfaces_read_error(
+    cli_runner: CliRunner, tmp_source_file: Path
+) -> None:
+    error = ReadError.from_message(
+        "failed to read source file",
+        context=ErrorContext(source_path=tmp_source_file),
+    )
+
+    with patch("mdcc.cli.create_bundle", side_effect=error):
+        result = cli_runner.invoke(app, ["bundle", "create", str(tmp_source_file)])
+
+    assert result.exit_code == 1
+    assert "failed to read source file" in result.output
+    assert "stage: read" in result.output
+    assert f"file: {tmp_source_file}" in result.output
+
+
+def test_inspect_command_round_trips_bundle_views(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("region,revenue\nna,10\neu,20\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        # Revenue
+
+        ```mdcc_table
+        frame = pd.read_csv("data.csv")
+        frame
+        ```
+        """,
+    )
+    bundle_path = real_create_bundle(
+        BundleCreateOptions(
+            input_path=source,
+            output_path=tmp_path / "report.mdcx",
+        )
+    )
+
+    overview_result = cli_runner.invoke(app, ["inspect", str(bundle_path)])
+    assert overview_result.exit_code == 0
+    assert "block details:" in overview_result.output
+    assert "dataset details:" in overview_result.output
+
+    source_result = cli_runner.invoke(app, ["inspect", str(bundle_path), "--source"])
+    assert source_result.exit_code == 0
+    assert source_result.output == source.read_text(encoding="utf-8")
+
+    annotated_result = cli_runner.invoke(
+        app, ["inspect", str(bundle_path), "--annotated"]
+    )
+    assert annotated_result.exit_code == 0
+    assert (
+        "<!-- mdcc-inspect:block id=block-0001 type=mdcc_table -->"
+        in annotated_result.output
+    )
+
+
+def test_inspect_command_rejects_conflicting_projection_flags(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("not-a-bundle", encoding="utf-8")
+
+    result = cli_runner.invoke(
+        app, ["inspect", str(bundle_file), "--source", "--annotated"]
+    )
+
+    assert result.exit_code != 0
+    assert "--source and --annotated cannot be used together" in result.output
+
+
+def test_inspect_command_surfaces_mdcc_error(
+    cli_runner: CliRunner, tmp_path: Path
+) -> None:
+    bundle_file = tmp_path / "report.mdcx"
+    bundle_file.write_text("placeholder", encoding="utf-8")
+    error = InspectionError.from_message(
+        "cannot project annotated source",
+        context=ErrorContext(source_path=bundle_file),
+    )
+
+    with patch("mdcc.cli.inspect_bundle_annotated", side_effect=error):
+        result = cli_runner.invoke(app, ["inspect", str(bundle_file), "--annotated"])
+
+    assert result.exit_code == 1
+    assert "cannot project annotated source" in result.output
+    assert "stage: inspection" in result.output
+    assert f"file: {bundle_file}" in result.output

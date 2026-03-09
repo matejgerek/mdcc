@@ -18,9 +18,15 @@ from mdcc.models import (
     ArtifactKind,
     BlockType,
     ChartResult,
+    CompiledBlockRecord,
     ExecutableBlockNode,
+    BlockExecutionResult,
     ExecutionPayload,
+    ExecutionStatus,
+    ExecutionStreams,
+    ExecutionTiming,
     RenderedArtifact,
+    RuntimeDatasetCapture,
     TableResult,
     TypedBlockResult,
 )
@@ -50,11 +56,20 @@ class CacheManifest(BaseModel):
     duration_ms: float | None = Field(default=None, ge=0)
     rows: int | None = Field(default=None, ge=0)
     columns: list[str] = Field(default_factory=list)
+    dataset_manifest_filename: str = "dataset_manifest.json"
+    dataset_payloads_dirname: str = "datasets"
 
 
 @dataclass(frozen=True, slots=True)
 class CacheResolution:
     artifact: RenderedArtifact | None
+    status: str
+    reason: str
+
+
+@dataclass(frozen=True, slots=True)
+class CacheCompiledResolution:
+    compiled_record: CompiledBlockRecord | None
     status: str
     reason: str
 
@@ -74,6 +89,23 @@ class CacheStore:
         payload: ExecutionPayload,
         build_context: BuildContext,
     ) -> CacheResolution:
+        compiled = self.resolve_compiled_record(
+            payload=payload,
+            build_context=build_context,
+        )
+        artifact = (
+            compiled.compiled_record.rendered_artifact
+            if compiled.compiled_record is not None
+            else None
+        )
+        return CacheResolution(artifact, compiled.status, compiled.reason)
+
+    def resolve_compiled_record(
+        self,
+        *,
+        payload: ExecutionPayload,
+        build_context: BuildContext,
+    ) -> CacheCompiledResolution:
         execution_fingerprint = build_execution_fingerprint(payload)
         artifact_fingerprint = build_artifact_fingerprint(
             execution_fingerprint=execution_fingerprint,
@@ -81,17 +113,19 @@ class CacheStore:
         )
         manifest = self._read_manifest(execution_fingerprint)
         if manifest is None:
-            return CacheResolution(None, "miss", "cache entry missing")
+            return CacheCompiledResolution(None, "miss", "cache entry missing")
 
         if manifest.execution_fingerprint != execution_fingerprint:
-            return CacheResolution(None, "miss", "execution fingerprint changed")
+            return CacheCompiledResolution(
+                None, "miss", "execution fingerprint changed"
+            )
 
         if manifest.block_type is not payload.block.block_type:
-            return CacheResolution(None, "miss", "block type changed")
+            return CacheCompiledResolution(None, "miss", "block type changed")
 
         dependency_error = self._validate_dependencies(manifest)
         if dependency_error is not None:
-            return CacheResolution(None, "miss", dependency_error)
+            return CacheCompiledResolution(None, "miss", dependency_error)
 
         semantic = self._load_semantic_result(
             manifest=manifest,
@@ -99,9 +133,17 @@ class CacheStore:
             execution_fingerprint=execution_fingerprint,
         )
         if semantic is None:
-            return CacheResolution(None, "miss", "cached semantic result missing")
+            return CacheCompiledResolution(
+                None, "miss", "cached semantic result missing"
+            )
 
         rendered_path = self._rendered_path(execution_fingerprint, manifest)
+        dataset_captures = self._materialize_dataset_captures(
+            payload=payload,
+            manifest=manifest,
+            execution_fingerprint=execution_fingerprint,
+            build_context=build_context,
+        )
         if (
             manifest.artifact_fingerprint == artifact_fingerprint
             and rendered_path.exists()
@@ -118,7 +160,17 @@ class CacheStore:
                 reason="artifact reused",
                 dependencies=manifest.dependencies,
             )
-            return CacheResolution(artifact, "hit", "artifact reused")
+            return CacheCompiledResolution(
+                self._compiled_record_from_cache(
+                    payload=payload,
+                    semantic=semantic,
+                    artifact=artifact,
+                    manifest=manifest,
+                    dataset_captures=dataset_captures,
+                ),
+                "hit",
+                "artifact reused",
+            )
 
         artifact = self._render_semantic_result(
             semantic=semantic,
@@ -133,15 +185,27 @@ class CacheStore:
             reason="artifact refreshed",
             dependencies=manifest.dependencies,
         )
-        return CacheResolution(artifact, "hit", "artifact refreshed")
+        return CacheCompiledResolution(
+            self._compiled_record_from_cache(
+                payload=payload,
+                semantic=semantic,
+                artifact=artifact,
+                manifest=manifest,
+                dataset_captures=dataset_captures,
+            ),
+            "hit",
+            "artifact refreshed",
+        )
 
     def store_typed_result(
         self,
         *,
         payload: ExecutionPayload,
+        execution_result: BlockExecutionResult,
         result: TypedBlockResult,
         artifact: RenderedArtifact,
         dependencies: list[CacheDependency],
+        dataset_captures: list[RuntimeDatasetCapture],
     ) -> None:
         execution_fingerprint = build_execution_fingerprint(payload)
         artifact_kind = (
@@ -162,17 +226,20 @@ class CacheStore:
             semantic_filename=_semantic_filename(artifact_kind),
             rendered_filename=_rendered_filename(artifact_kind),
             mime_type=artifact.mime_type or _default_mime_type(artifact_kind),
-            duration_ms=None,
+            duration_ms=execution_result.timing.duration_ms,
             rows=result.rows if isinstance(result, TableResult) else None,
             columns=result.columns if isinstance(result, TableResult) else [],
         )
-        if payload.log_path.exists():
-            manifest.duration_ms = _extract_duration_ms(payload.log_path)
 
         entry_dir = self._entry_dir(execution_fingerprint)
         entry_dir.mkdir(parents=True, exist_ok=True)
         self._persist_semantic_result(execution_fingerprint, result)
         self._persist_rendered_artifact(execution_fingerprint, manifest, artifact)
+        self._persist_dataset_captures(
+            execution_fingerprint=execution_fingerprint,
+            manifest=manifest,
+            dataset_captures=dataset_captures,
+        )
         self._write_manifest(execution_fingerprint, manifest)
 
     def _validate_dependencies(self, manifest: CacheManifest) -> str | None:
@@ -343,6 +410,114 @@ class CacheStore:
             encoding="utf-8",
         )
 
+    def _persist_dataset_captures(
+        self,
+        *,
+        execution_fingerprint: str,
+        manifest: CacheManifest,
+        dataset_captures: list[RuntimeDatasetCapture],
+    ) -> None:
+        entry_dir = self._entry_dir(execution_fingerprint)
+        payload_dir = entry_dir / manifest.dataset_payloads_dirname
+        payload_dir.mkdir(parents=True, exist_ok=True)
+
+        normalized: list[dict[str, str | int | None]] = []
+        for capture in dataset_captures:
+            target_path = payload_dir / f"dataset_{capture.ordinal:03d}.parquet"
+            target_path.write_bytes(capture.payload_path.read_bytes())
+            normalized.append(
+                {
+                    "ordinal": capture.ordinal,
+                    "source_kind": capture.source_kind.value,
+                    "source_path": capture.source_path,
+                    "payload_path": str(target_path),
+                }
+            )
+
+        (entry_dir / manifest.dataset_manifest_filename).write_text(
+            json.dumps(normalized, indent=2),
+            encoding="utf-8",
+        )
+
+    def _materialize_dataset_captures(
+        self,
+        *,
+        payload: ExecutionPayload,
+        manifest: CacheManifest,
+        execution_fingerprint: str,
+        build_context: BuildContext,
+    ) -> list[RuntimeDatasetCapture]:
+        manifest_path = (
+            self._entry_dir(execution_fingerprint) / manifest.dataset_manifest_filename
+        )
+        try:
+            raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, OSError, json.JSONDecodeError):
+            return []
+
+        captures: list[RuntimeDatasetCapture] = []
+        if not isinstance(raw, list):
+            return captures
+
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            payload_path = item.get("payload_path")
+            ordinal = item.get("ordinal")
+            if not isinstance(payload_path, str) or not isinstance(ordinal, int):
+                continue
+            source_path = item.get("source_path")
+            source_kind = item.get("source_kind")
+            if not isinstance(source_kind, str):
+                continue
+            source_cache_path = Path(payload_path)
+            if not source_cache_path.exists():
+                continue
+            target_path = (
+                build_context.dataset_payload_dir(payload.block.block_index)
+                / f"dataset_{ordinal:03d}.parquet"
+            )
+            target_path.write_bytes(source_cache_path.read_bytes())
+            captures.append(
+                RuntimeDatasetCapture.model_validate(
+                    {
+                        "ordinal": ordinal,
+                        "source_kind": source_kind,
+                        "source_path": source_path
+                        if isinstance(source_path, str)
+                        else None,
+                        "payload_path": str(target_path),
+                    }
+                )
+            )
+        return captures
+
+    def _compiled_record_from_cache(
+        self,
+        *,
+        payload: ExecutionPayload,
+        semantic: TypedBlockResult,
+        artifact: RenderedArtifact,
+        manifest: CacheManifest,
+        dataset_captures: list[RuntimeDatasetCapture],
+    ) -> CompiledBlockRecord:
+        execution_result = BlockExecutionResult(
+            block=payload.block,
+            status=ExecutionStatus.SUCCESS,
+            streams=ExecutionStreams(),
+            timing=ExecutionTiming(duration_ms=manifest.duration_ms),
+            raw_value=semantic.value,
+            raw_type_name=type(semantic.value).__name__,
+        )
+        return CompiledBlockRecord(
+            payload=payload,
+            execution_result=execution_result,
+            typed_result=semantic,
+            dependencies=manifest.dependencies,
+            dataset_captures=dataset_captures,
+            rendered_artifact=artifact,
+        )
+
     def _entry_dir(self, execution_fingerprint: str) -> Path:
         return self.root / execution_fingerprint
 
@@ -382,6 +557,7 @@ def build_execution_fingerprint(payload: ExecutionPayload) -> str:
         "block_type": payload.block.block_type.value,
         "code": payload.block.code,
         "capture_mode": capture_mode_for_source(payload.block.code),
+        "capture_datasets": payload.capture_datasets,
         "runtime_prelude_fingerprint": _hash_text(runtime_prelude_template()),
         "mdcc_version": __version__,
         "python_version": _python_version(),
@@ -484,6 +660,7 @@ def _extract_duration_ms(log_path: Path) -> float | None:
 
 __all__ = [
     "CACHE_DIR_NAME",
+    "CacheCompiledResolution",
     "CacheDependency",
     "CacheManifest",
     "CacheResolution",

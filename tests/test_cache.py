@@ -240,3 +240,45 @@ def test_compile_caches_table_with_multiindex_columns(tmp_path: Path) -> None:
     )
     assert manifest["semantic_filename"] == "table.pkl"
     assert pd.read_pickle(semantic_path).columns.nlevels == 2
+
+
+def test_compile_does_not_capture_reader_datasets(tmp_path: Path) -> None:
+    data_path = tmp_path / "data.csv"
+    data_path.write_text("value\n1\n2\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        frame = pd.read_csv("data.csv")
+        frame
+        ```
+        """,
+    )
+
+    _compile_with_fake_pdf(input_path=source, output_path=tmp_path / "report.pdf")
+
+    build_dir = tmp_path / ".mdcc_build"
+    assert not build_dir.exists()
+
+
+def test_compile_allows_reader_outputs_that_are_not_parquet_serializable(
+    tmp_path: Path,
+) -> None:
+    data_path = tmp_path / "complex.csv"
+    data_path.write_text("value\n1+2j\n", encoding="utf-8")
+    source = _write_source(
+        tmp_path,
+        """
+        ```mdcc_table
+        frame = pd.read_csv("complex.csv", converters={"value": complex})
+        frame
+        ```
+        """,
+    )
+
+    result = _compile_with_fake_pdf(
+        input_path=source,
+        output_path=tmp_path / "complex.pdf",
+    )
+
+    assert result.exists()

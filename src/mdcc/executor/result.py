@@ -26,6 +26,10 @@ import pickle
 from pathlib import Path
 from typing import Any
 
+import json
+
+from mdcc.models import RuntimeDatasetCapture
+
 
 def read_result_envelope(result_path: Path) -> dict[str, Any] | None:
     """Deserialize a result envelope produced by a payload script.
@@ -62,4 +66,34 @@ def extract_raw_value(result_path: Path) -> tuple[Any, str | None]:
     return value, qualified
 
 
-__all__ = ["extract_raw_value", "read_result_envelope"]
+def read_runtime_dataset_captures(
+    dataset_manifest_path: Path,
+) -> list[RuntimeDatasetCapture]:
+    """Deserialize runtime dataset capture facts produced by the prelude."""
+    if not dataset_manifest_path.exists():
+        return []
+
+    try:
+        payload = json.loads(dataset_manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+
+    if not isinstance(payload, list):
+        return []
+
+    captures: list[RuntimeDatasetCapture] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        try:
+            captures.append(RuntimeDatasetCapture.model_validate(item))
+        except Exception:
+            continue
+    return captures
+
+
+__all__ = [
+    "extract_raw_value",
+    "read_result_envelope",
+    "read_runtime_dataset_captures",
+]

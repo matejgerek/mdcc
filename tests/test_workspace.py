@@ -45,6 +45,8 @@ class TestCreateBuildsDirectoryStructure:
         assert ctx.logs_dir.is_dir()
         assert ctx.results_dir.is_dir()
         assert ctx.dependencies_dir.is_dir()
+        assert ctx.dataset_manifests_dir.is_dir()
+        assert ctx.dataset_payloads_dir.is_dir()
 
     def test_build_dir_is_adjacent_to_source(self, tmp_path: Path) -> None:
         src = _source_file(tmp_path)
@@ -96,6 +98,19 @@ class TestPathHelpers:
         ctx = BuildContext.create(src)
         p = ctx.dependency_path(4)
         assert p == ctx.dependencies_dir / "dependency_004.json"
+
+    def test_dataset_manifest_path(self, tmp_path: Path) -> None:
+        src = _source_file(tmp_path)
+        ctx = BuildContext.create(src)
+        p = ctx.dataset_manifest_path(2)
+        assert p == ctx.dataset_manifests_dir / "dataset_manifest_002.json"
+
+    def test_dataset_payload_dir(self, tmp_path: Path) -> None:
+        src = _source_file(tmp_path)
+        ctx = BuildContext.create(src)
+        p = ctx.dataset_payload_dir(7)
+        assert p == ctx.dataset_payloads_dir / "block_007"
+        assert p.is_dir()
 
 
 class TestContextManagerCleanup:

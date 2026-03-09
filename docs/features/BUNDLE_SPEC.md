@@ -299,6 +299,18 @@ Recommended approach:
 - wrap supported pandas readers to record dataset captures in addition to file dependencies
 - let host-side bundle code decide which captures become persisted bundle datasets
 
+Phase 1a decision:
+
+- dataset capture is enabled for `mdcc bundle create`, not for `mdcc compile`
+- normal source compilation continues to track file dependencies from wrapped pandas readers, but it does not persist reader outputs to Parquet
+- `mdcc bundle create` bypasses the block cache in phase 1a so bundle creation always materializes the dataset captures it needs directly from execution
+
+Rationale:
+
+- persisting reader outputs during ordinary `compile` introduced overhead and a failure mode unrelated to PDF generation: some valid pandas dataframes can be rendered normally but cannot be serialized to Parquet
+- reusing compile cache entries for bundle creation is ambiguous when those cache entries were created without dataset capture enabled
+- bypassing cache for bundle creation keeps phase 1a semantics simple while preserving the existing compile cache behavior
+
 The prelude should not assign final bundle IDs or write SQLite directly. It should emit normalized capture facts such as:
 
 - source kind (`read_csv`, `read_parquet`, etc.)
@@ -410,6 +422,8 @@ Delivers:
 - canonical source stored exactly as authored
 - bundle metadata and document manifest
 - persisted datasets for wrapped input reads and primary rendered datasets
+- dataset capture performed during `mdcc bundle create` execution only
+- bundle creation bypasses block cache in phase 1a
 - dataset schema, row count, and storage metadata
 - mapping between blocks and datasets
 - `mdcc bundle create`
@@ -814,3 +828,44 @@ Recommended diagnostic categories:
 - `bundle_validation_error` — internal contract violation within a readable bundle
 - `inspection_error` — object requested by the user does not exist or cannot be displayed
 - `sql_error` — invalid SQL or SQL execution failure
+
+---
+
+# 10. Implementation Roadmap
+
+This section defines the discrete implementation tasks for completing the bundle artifact features.
+
+## 10.1 Phase 1b — Projects & Rendering
+
+### BT-01: Inspect Commands (DONE)
+Implement the `mdcc inspect` command group.
+- **Scope**: `mdcc inspect <bundle>` (overview), `--source` prints canonical source, `--annotated` prints source with read-time dataset overlays.
+- **Notes**: Derived projection only; no source mutation.
+
+### BT-02: Render from Bundle (DONE)
+Implement `mdcc render <bundle> -o <file.pdf>`.
+- **Scope**: Extend schema with `block_outputs` and `output_payloads`. Store Vega-Lite/Parquet semantic outputs during creation. Render by feeding these outputs into existing renderers.
+- **Notes**: Feature-detect `block_outputs` table presence in the bundle.
+
+## 10.2 Phase 2 — Navigation
+
+### BT-03: Block and Outline Navigation
+Implement `mdcc block` group and `mdcc outline`.
+- **Scope**: Table-of-contents view with blocks interspersed. Block listing, detail view, and source-level slicing.
+- **Notes**: No schema changes; pure navigation and formatting work.
+
+### BT-04: Annotated View Enrichment
+Enrich the BT-01 annotated view with deeper relationship metadata.
+- **Scope**: Show columns, fingerprints, and row counts inline for all linked datasets.
+
+## 10.3 Phase 3 — Provenance & Persistence
+
+### BT-05: Provenance Layer
+Persist execution stats and lineage in the bundle.
+- **Scope**: New tables `block_provenance` and `execution_stats`. Capture file dependency hashes and execution timing.
+- **Notes**: Additive tables; detected at runtime.
+
+### BT-06: Intermediate Dataset Persistence
+Allow explicit opt-in for persisting mid-block DataFrames.
+- **Scope**: `--persist-intermediates` flag. Update prelude to serialize mid-run captures. Add `intermediate` and `derived` roles.
+- **Notes**: No new tables; additive enum roles in existing tables.
