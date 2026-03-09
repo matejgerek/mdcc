@@ -14,6 +14,9 @@ description: >
 
 `mdcc` compiles a single plain-text Markdown file — combining narrative, data tables, and charts — into a deterministic PDF report. It is designed for agents: easy to generate, modify, debug, and rerun automatically.
 
+If `mdcc` is not installed, use the installation guide in the project README:
+https://raw.githubusercontent.com/matejgerek/mdcc/main/README.md
+
 ---
 
 ## Quick Reference
