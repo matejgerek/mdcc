@@ -42,21 +42,31 @@ brew install weasyprint
 
 > On Linux, install the equivalent packages for your distro (Pango, Cairo, etc.) — see the [WeasyPrint docs](https://doc.courtbouillon.org/weasyprint/stable/first_steps.html).
 
-### Install the package
+### Install the CLI from a local checkout
 
 Requires **Python 3.12+** and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-uv pip install -e .
+git clone <your-repo-url> mdcc
+cd mdcc
+uv tool install --editable .
 ```
 
-Or install from source with pip:
+This installs the `mdcc` command into your user environment, so you can run `mdcc` from any directory as long as `uv`'s bin directory is on your `PATH` (typically `~/.local/bin` on macOS and Linux).
+
+Because the install is editable, changes under `src/mdcc/` are reflected the next time you run `mdcc` without reinstalling it.
+
+If you change project dependencies or console script metadata, reinstall the tool:
 
 ```bash
-pip install -e .
+uv tool install --force --editable .
 ```
 
-This installs the `mdcc` CLI command.
+If you prefer a project-local development environment instead of a user-level CLI install, you can still use:
+
+```bash
+uv pip install -e .
+```
 
 ---
 
