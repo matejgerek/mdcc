@@ -70,6 +70,9 @@ _DOCUMENT_TEMPLATE = Environment(
       .mdcc-artifact {
         margin-bottom: 1.5rem;
       }
+      .mdcc-chart {
+        text-align: center;
+      }
       .mdcc-artifact table {
         border-collapse: collapse;
         width: 100%;
@@ -84,6 +87,10 @@ _DOCUMENT_TEMPLATE = Environment(
         display: block;
         height: auto;
         max-width: 100%;
+      }
+      .mdcc-chart svg {
+        margin-left: auto;
+        margin-right: auto;
       }
       .mdcc-caption {
         color: #374151;

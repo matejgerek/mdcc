@@ -489,6 +489,29 @@ def test_render_intermediate_document_renders_html_in_document_order(
     assert table_caption_index < table_html_index
 
 
+def test_render_intermediate_document_centers_chart_sections(
+    tmp_path: Path,
+) -> None:
+    document, chart_result, table_result, build_context = _chart_and_table_document(
+        tmp_path
+    )
+    assembled = assemble_document(
+        document,
+        [
+            render_chart_artifact(chart_result, build_context),
+            render_table_artifact(table_result, build_context),
+        ],
+    )
+
+    intermediate = render_intermediate_document(assembled)
+
+    assert ".mdcc-chart {" in intermediate.html
+    assert "text-align: center;" in intermediate.html
+    assert ".mdcc-chart svg {" in intermediate.html
+    assert "margin-left: auto;" in intermediate.html
+    assert "margin-right: auto;" in intermediate.html
+
+
 def test_render_intermediate_document_resolves_cross_references_in_markdown(
     tmp_path: Path,
 ) -> None:
