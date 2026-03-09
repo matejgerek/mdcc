@@ -4,6 +4,8 @@
 
 It turns a single plain-text document — combining narrative text, data loading, tables, and charts — into a **reproducible PDF report**.
 
+> Warning: this repository is still a work in progress. Interfaces, document format details, installation steps, and behavior may change as the project evolves.
+
 ---
 
 ## Why mdcc?

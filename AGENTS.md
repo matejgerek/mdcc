@@ -24,11 +24,13 @@
 
 ## Verification
 
-- After implementation, run formatting before finishing:
+- Run the full verification sequence when changes affect Python code, packaging, runtime behavior, or tests.
+- For documentation-only changes (for example `README.md`, `docs/`, `AGENTS.md`) or other clearly non-functional edits, full verification is not required unless the change could affect generated output or developer workflow in a way that should be validated.
+- When full verification is required, run formatting before finishing:
   - `uv run ruff format .`
 - After formatting, run typechecking and linting:
   - `uv run ruff check .`
   - `uv run mypy src tests`
 - Run tests before considering the task complete:
   - `uv run pytest`
-- If a command fails, fix the issue or clearly report the blocker and the failing command.
+- If a required command fails, fix the issue or clearly report the blocker and the failing command.
